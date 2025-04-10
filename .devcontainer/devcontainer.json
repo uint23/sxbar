@@ -1,7 +1,7 @@
 {
   "image": "mcr.microsoft.com/devcontainers/universal:2",
   "features": {
-    "ghcr.io/devcontainers/features/desktop-lite:1": {}
+    "ghcr.io/bascodes/devcontainer-features/desktop-novnc:0": {}
   },
   "forwardPorts": [6080],
   "portsAttributes": {
