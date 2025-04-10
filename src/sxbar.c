@@ -2,6 +2,7 @@
 #include <X11/X.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
@@ -29,12 +30,11 @@ static void cleanup(void);
 static void createwin(void);
 static unsigned long getcol(const char *colstr);
 static void run(void);
-static void setdock(void);
+static void setatoms(void);
 static void sethints(void);
 static void setup(void);
 
 // Variables
-static unsigned long fgpx;
 static unsigned long bgpx;
 static unsigned long bdrpx;
 static unsigned int	scrw;
@@ -46,6 +46,7 @@ static unsigned int	barw;
 static Display *dpy;
 static Window barwin;
 static Window root;
+//static GC gc;
 
 // Functions
 static void
@@ -66,13 +67,8 @@ createwin(void)
         ExposureMask | KeyPressMask
     );
     
-    // Set dock properties BEFORE mapping
-    setdock();
-    
-    // Map the window
+    setatoms();
     XMapWindow(dpy, barwin);
-
-    // Make sure it's on top
     XRaiseWindow(dpy, barwin);
     XSync(dpy, False);
 }
@@ -116,7 +112,7 @@ run(void)
 }
 
 static void
-setdock(void)
+setatoms(void)
 {
     Atom type, dock, state, sticky, strut, strutpartial, override;
     unsigned long strutvals[4] = {0}; // left, right, top, bottom
@@ -191,41 +187,33 @@ setup(void)
 	if (dpy == 0)
 		death("Failed to open display.");
 
-	scr = DefaultScreen(dpy);
+	scr  = DefaultScreen(dpy);
 	scrw = DisplayWidth(dpy, scr);
 	scrh = DisplayHeight(dpy, scr);
 	root = RootWindow(dpy, scr);
-	
-	if (topbar) {
-		if (padv) bary = padv;
-		else bary = 0;
-	} else {
-		if (padv) bary = scrh - barh - padv;
-		else bary = scrh - barh;
-	}
 
+	// Calculate bar y-position
+	if (topbar)
+		bary = padv ? padv : 0;
+	else
+		bary = padv ? scrh - barh - padv - bdrw :
+					  scrh - barh - bdrw;
+
+	// Calculate bar x-position and width
 	if (padh) {
-		if (centre) {
-			barx = padh;
-			barw = scrw - (padh * 2);
-		} else {
-			barx = 0;
-			barw = scrw - padh;
-		}
+		barx = centre ? padh : 0;
+		barw = centre ? scrw - (padh * 2) : scrw - padh;
 	} else {
 		barx = 0;
 		barw = scrw;
 	}
 
-	if (barh > MAXBARH)
-		barh = MAXBARH;
-	if (padv > MAXPADV)
-		padv = MAXPADV;
-	if (padh > MAXPADH)
-		padh = MAXPADH;
+	// Clamp dimensions
+	if (barh  > MAXBARH)  barh  = MAXBARH;
+	if (padv  > MAXPADV)  padv  = MAXPADV;
+	if (padh  > MAXPADH)  padh  = MAXPADH;
 
-	fgpx = getcol(colfg);
-	bgpx = getcol(colbg);
+	bgpx  = getcol(colbg);
 	bdrpx = getcol(colbdr);
 }
 

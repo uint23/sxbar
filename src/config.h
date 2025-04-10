@@ -7,6 +7,11 @@
 #define MAXBARH	40	// The max height of the bar, this shouldn't really be more than 40
 #define MAXBDRW	10	// The max border width of the bar
 
+#include <X11/keysym.h>
+#define BUTTONLC 1 	// Left click
+#define BUTTONMC 2 	// Middle click
+#define BUTTONRC 3 	// Right click
+
 // Keybindings
 //#define TOGGLE	{ ModMask|ShiftMask,	XK_b,	{.v=toggle}}
 
@@ -15,10 +20,9 @@ static unsigned int	centre	= 1;	// If using padding, this will centre your bar
 static unsigned int	barh	= 20;	// Bar height
 static unsigned int	padh	= 400;	// Horizontal bar padding
 static unsigned int	padv	= 10;	// Vertical bar padding
-static unsigned int bdrw	= 0;	// Border width of the bar. Set to 0 for no border
+static unsigned int bdrw	= 10;	// Border width of the bar. Set to 0 for no border
 
-static const char colfg[]	= "#ABCDEF";	// Foreground colour
-static const char colbg[]	= "#555555";	// Background colour
-static const char colbdr[]	= "#090425";	// Border colour
+static const char colbg[]	= "#A0A0DD";	// Background colour
+static const char colbdr[]	= "#FF0000";	// Border colour
 // static const char *font		= "terminus";
-// static const char *tags[]	= { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+static const char *tags[]	= { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
