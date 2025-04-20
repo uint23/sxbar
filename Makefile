@@ -1,27 +1,35 @@
-# Flags
 CC = gcc
-CFLAGS = -Wall -O2 -g `pkg-config --cflags x11 xft`
-LDFLAGS = `pkg-config --libs x11 xft`
+CFLAGS = -Wall -Wextra -O3 -g -Isrc -march=native -flto -s -Os
+LDFLAGS = -lX11
 
-# Dirs
 SRC_DIR = src
-OBJ_DIR = obj
-BIN = sxbar
-
-# Source and object files
 SRC = $(wildcard $(SRC_DIR)/*.c)
-OBJ = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRC))
-
-.PHONY: all clean
+OBJ = $(SRC:.c=.o)
+BIN = sxbar
+PREFIX = /usr/local
 
 all: $(BIN)
 
 $(BIN): $(OBJ)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
-	@mkdir -p $(OBJ_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+$(SRC_DIR)/%.o: $(SRC_DIR)/%.c
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -rf $(OBJ_DIR) $(BIN)
+	rm -f $(SRC_DIR)/*.o $(BIN)
+
+install: all
+	@echo "Installing $(BIN) to $(DESTDIR)$(PREFIX)/bin..."
+	@mkdir -p $(DESTDIR)$(PREFIX)/bin
+	@install -m 755 $(BIN) $(DESTDIR)$(PREFIX)/bin/$(BIN)
+	@echo "Installation complete."
+
+uninstall:
+	@echo "Uninstalling $(BIN) from $(DESTDIR)$(PREFIX)/bin..."
+	@rm -f $(DESTDIR)$(PREFIX)/bin/$(BIN)
+	@echo "Uninstallation complete."
+
+clean-install: clean install
+
+.PHONY: all clean install uninstall clean-install
