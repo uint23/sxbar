@@ -9,6 +9,7 @@
 #include <X11/Xutil.h>
 
 #include "defs.h"
+#include "parser.h"
 
 static void create_win(void);
 static int get_current_workspace(void);
@@ -231,22 +232,29 @@ run(void)
 static void
 setup(void)
 {
-	if ((dpy = XOpenDisplay(NULL)) == 0)
-		errx(0, "can't open display. quitting...");
-	root = XDefaultRootWindow(dpy);
-	scr = DefaultScreen(dpy);
+	// Parse config file
+	char config_path[256];
+	snprintf(config_path, sizeof(config_path), "%s/.config/sxbarrc", getenv("HOME"));
+	Config config = parse_config_file(config_path);
 
-	for (int i = 0; i < LASTEvent; ++i)
-		evtable[i] = hdl_dummy;
+	dpy = XOpenDisplay(NULL);
+	if (!dpy)
+		errx(1, "could not open display");
+
+	scr = DefaultScreen(dpy);
+	root = RootWindow(dpy, scr);
+
+	fg_col = parse_col(config.fg_color);
+	bg_col = parse_col(config.bg_color);
+	border_col = parse_col(config.border_color);
+
+	create_win();
 
 	evtable[Expose] = hdl_expose;
 	evtable[PropertyNotify] = hdl_property;
-
-	XSelectInput(dpy, root, PropertyChangeMask);
-	fg_col = parse_col(BAR_COLOR_FG);
-	bg_col = parse_col(BAR_COLOR_BG);
-	border_col = parse_col(BAR_COLOR_BORDER);
-	create_win();
+	for (int i = 0; i < LASTEvent; ++i)
+		if (!evtable[i])
+			evtable[i] = hdl_dummy;
 }
 
 static void

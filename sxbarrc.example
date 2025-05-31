@@ -1,0 +1,7 @@
+# sxbar configuration file
+# Place this file at ~/.config/sxbarrc
+
+# Colors (hex format)
+background_color: #56002e
+foreground_color: #ffffff
+border_color: #005577
