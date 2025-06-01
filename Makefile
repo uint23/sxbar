@@ -7,6 +7,11 @@ SRC = $(wildcard $(SRC_DIR)/*.c)
 OBJ = $(SRC:.c=.o)
 BIN = sxbar
 PREFIX = /usr/local
+MANDIR = /usr/local/share/man
+MAN1DIR = $(MANDIR)/man1
+
+# Man page for sxbar
+MANPAGE = sxbar.1
 
 all: $(BIN)
 
@@ -25,10 +30,19 @@ install: all
 	@install -m 755 $(BIN) $(DESTDIR)$(PREFIX)/bin/$(BIN)
 	@echo "Installation complete."
 
+	@echo "Installing man page to $(DESTDIR)$(MAN1DIR)..."
+	@mkdir -p $(DESTDIR)$(MAN1DIR)
+	@install -m 644 $(MANPAGE) $(DESTDIR)$(MAN1DIR)/$(MANPAGE)
+	@echo "Man page installation complete."
+
 uninstall:
 	@echo "Uninstalling $(BIN) from $(DESTDIR)$(PREFIX)/bin..."
 	@rm -f $(DESTDIR)$(PREFIX)/bin/$(BIN)
 	@echo "Uninstallation complete."
+
+	@echo "Uninstalling man page from $(DESTDIR)$(MAN1DIR)..."
+	@rm -f $(DESTDIR)$(MAN1DIR)/$(MANPAGE)
+	@echo "Man page uninstallation complete."
 
 clean-install: clean install
 
