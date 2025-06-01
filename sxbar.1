@@ -1,0 +1,66 @@
+.TH SXBAR 1 "May 2025" "sxbar 0.1.1" "User Commands"
+
+.SH NAME
+sxbar \- The simple, yet powerful status bar for Xorg.
+
+.SH SYNOPSIS
+.B sxbar
+
+.SH DESCRIPTION
+sxbar is a minimal, customizable status bar for X11, written in C using Xlib and Xft. It is designed to integrate well with lightweight window managers such as sxwm.
+
+.SH FEATURES
+.TP
+Draws time using strftime (format configurable in source).
+.TP
+Displays focused window title.
+.TP
+Shows workspace indicators with active workspace highlighting.
+.TP
+Supports multiple monitors using XRandR.
+.TP
+Minimal dependencies (Xlib, Xft, fontconfig).
+.TP
+Small and easily hackable single-file C program.
+
+.SH CONFIGURATION
+sxbar is configured by editing and recompiling the source code. Key options include:
+
+.TP
+.B SHOW_TIME
+If defined, sxbar will render the system time using a configurable `TIME_FORMAT`.
+
+.TP
+.B SHOW_WINDOW_NAME
+If defined, sxbar will render the name of the currently focused window.
+
+.TP
+.B COLOR_FG, COLOR_BG, COLOR_HL
+Colors for foreground text, background bar, and highlighted elements respectively.
+
+To apply changes, edit the `sxbar.c` source and recompile using `make`.
+
+.SH USAGE
+Simply launch `sxbar` from your `.xinitrc` or startup script, typically before launching your window manager:
+
+.nf
+sxbar &
+exec sxwm
+.fi
+
+The bar will appear on the top of the screen and dynamically update as workspaces or focused windows change.
+
+.SH FILES
+sxbar does not use any runtime configuration files. All configuration is done at compile time.
+
+.SH AUTHOR
+Written by TheMeaner (TheMeaner0), 2025.
+
+.SH SEE ALSO
+sxwm(1), dmenu(1), st(1), X(7)
+
+.SH VERSION
+sxbar ver. 0.1.1
+
+.SH LICENSE
+MIT License. See LICENSE for more information.
