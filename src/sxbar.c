@@ -12,7 +12,7 @@
 
 void create_win(void);
 int get_current_workspace(void);
-char** get_workspace_name(int *count);
+char **get_workspace_name(int *count);
 void hdl_dummy(XEvent *xev);
 void hdl_expose(XEvent *xev);
 void hdl_property(XEvent *xev);
@@ -44,26 +44,14 @@ void create_win(void)
 	int y = BOTTOM_BAR ? sh - h - BAR_VERT_PAD - bw : BAR_VERT_PAD;
 
 	XSetWindowAttributes wa = {
-		.background_pixel = bg_col,
-		.border_pixel = border_col,
-		.event_mask = ExposureMask | ButtonPressMask
-	};
+	    .background_pixel = bg_col, .border_pixel = border_col, .event_mask = ExposureMask | ButtonPressMask};
 
-	win = XCreateWindow(dpy, root,
-			x, y,
-			w, h,
-			bw,
-			CopyFromParent,
-			InputOutput,
-			DefaultVisual(dpy, scr),
-			CWBackPixel | CWBorderPixel | CWEventMask,
-			&wa);
+	win = XCreateWindow(dpy, root, x, y, w, h, bw, CopyFromParent, InputOutput, DefaultVisual(dpy, scr),
+	                    CWBackPixel | CWBorderPixel | CWEventMask, &wa);
 
 	Atom A_WM_TYPE = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
 	Atom A_WM_TYPE_DOCK = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
-	XChangeProperty(dpy, win, A_WM_TYPE, XA_ATOM, 32,
-			PropModeReplace,
-			(unsigned char *)&A_WM_TYPE_DOCK, 1);
+	XChangeProperty(dpy, win, A_WM_TYPE, XA_ATOM, 32, PropModeReplace, (unsigned char *)&A_WM_TYPE_DOCK, 1);
 
 	Atom A_STRUT = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
 	long strut[12] = {0};
@@ -72,15 +60,14 @@ void create_win(void)
 		strut[3] = h + bw;
 		strut[10] = x;
 		strut[11] = x + w - 1;
-	} else {
+	}
+	else {
 		strut[2] = y + h + bw;
 		strut[8] = x;
 		strut[9] = x + w - 1;
 	}
 
-	XChangeProperty(dpy, win, A_STRUT, XA_CARDINAL, 32,
-			PropModeReplace,
-			(unsigned char *)strut, 12);
+	XChangeProperty(dpy, win, A_STRUT, XA_CARDINAL, 32, PropModeReplace, (unsigned char *)strut, 12);
 
 	XMapRaised(dpy, win);
 
@@ -100,9 +87,9 @@ int get_current_workspace(void)
 	unsigned char *data = NULL;
 	Atom prop = XInternAtom(dpy, "_NET_CURRENT_DESKTOP", False);
 
-	if (XGetWindowProperty(dpy, root, prop, 0, 1, False,
-				XA_CARDINAL, &actual_type, &actual_format,
-				&nitems, &bytes_after, &data) == Success && data) {
+	if (XGetWindowProperty(dpy, root, prop, 0, 1, False, XA_CARDINAL, &actual_type, &actual_format, &nitems,
+	                       &bytes_after, &data) == Success &&
+	    data) {
 		int ws = *(unsigned long *)data;
 		XFree(data);
 		return ws;
@@ -110,7 +97,7 @@ int get_current_workspace(void)
 	return -1;
 }
 
-char** get_workspace_name(int *count)
+char **get_workspace_name(int *count)
 {
 	Atom actual_type;
 	int actual_format;
@@ -120,9 +107,9 @@ char** get_workspace_name(int *count)
 	Atom prop = XInternAtom(dpy, "_NET_DESKTOP_NAMES", False);
 	Atom utf8 = XInternAtom(dpy, "UTF8_STRING", False);
 
-	if (XGetWindowProperty(dpy, root, prop, 0, (~0L), False,
-				utf8, &actual_type, &actual_format,
-				&nitems, &bytes_after, &data) == Success && data) {
+	if (XGetWindowProperty(dpy, root, prop, 0, (~0L), False, utf8, &actual_type, &actual_format, &nitems, &bytes_after,
+	                       &data) == Success &&
+	    data) {
 
 		char **names = NULL;
 		int n = 0;
@@ -142,12 +129,12 @@ char** get_workspace_name(int *count)
 
 void hdl_dummy(XEvent *xev)
 {
-	(void) xev;
+	(void)xev;
 }
 
 void hdl_expose(XEvent *xev)
 {
-	(void) xev;
+	(void)xev;
 	XClearWindow(dpy, win);
 
 	int current_ws = get_current_workspace();
@@ -161,13 +148,11 @@ void hdl_expose(XEvent *xev)
 		for (int i = 0; i < name_count; ++i) {
 			char label[64];
 			if (i == current_ws)
-				snprintf(label, sizeof(label), "%s%s%s ",
-						BAR_WS_HIGHLIGHT_LEFT, names[i], BAR_WS_HIGHLIGHT_RIGHT);
+				snprintf(label, sizeof(label), "%s%s%s ", BAR_WS_HIGHLIGHT_LEFT, names[i], BAR_WS_HIGHLIGHT_RIGHT);
 			else
 				snprintf(label, sizeof(label), "%s ", names[i]);
 
-			XDrawString(dpy, win, gc, text_x, text_y,
-					label, strlen(label));
+			XDrawString(dpy, win, gc, text_x, text_y, label, strlen(label));
 			text_x += XTextWidth(font, label, strlen(label)) + BAR_WS_SPACING;
 			free(names[i]);
 		}
@@ -178,8 +163,7 @@ void hdl_expose(XEvent *xev)
 	int version_width = XTextWidth(font, SXBAR_VERSION, strlen(SXBAR_VERSION));
 	int version_x = bar_width - version_width - BAR_TEXT_PAD;
 
-	XDrawString(dpy, win, gc, version_x, text_y,
-			SXBAR_VERSION, strlen(SXBAR_VERSION));
+	XDrawString(dpy, win, gc, version_x, text_y, SXBAR_VERSION, strlen(SXBAR_VERSION));
 }
 
 void hdl_property(XEvent *xev)
