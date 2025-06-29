@@ -16,7 +16,7 @@ char **get_workspace_name(int *count);
 void hdl_dummy(XEvent *xev);
 void hdl_expose(XEvent *xev);
 void hdl_property(XEvent *xev);
-ulong parse_col(const char *hex);
+unsigned long parse_col(const char *hex);
 void run(void);
 void setup(void);
 void xev_cases(XEvent *xev);
@@ -26,10 +26,10 @@ XFontStruct *font;
 Display *dpy;
 Window root, win;
 GC gc;
-uint scr;
-ulong fg_col;
-ulong bg_col;
-ulong border_col;
+int scr;
+unsigned long fg_col;
+unsigned long bg_col;
+unsigned long border_col;
 #include "config.h"
 
 void create_win(void)
@@ -141,9 +141,9 @@ void hdl_expose(XEvent *xev)
 	int name_count = 0;
 	char **names = get_workspace_name(&name_count);
 
-	uint text_y = (BAR_HEIGHT + font->ascent - font->descent) / 2;
+	unsigned int text_y = (BAR_HEIGHT + font->ascent - font->descent) / 2;
 
-	uint text_x = BAR_TEXT_PAD;
+	unsigned int text_x = BAR_TEXT_PAD;
 	if (names) {
 		for (int i = 0; i < name_count; ++i) {
 			char label[64];
@@ -176,7 +176,7 @@ void hdl_property(XEvent *xev)
 	}
 }
 
-ulong parse_col(const char *hex)
+unsigned long parse_col(const char *hex)
 {
 	XColor col;
 	Colormap cmap = DefaultColormap(dpy, DefaultScreen(dpy));
