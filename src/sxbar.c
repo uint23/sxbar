@@ -1,8 +1,8 @@
+#define _POSIX_C_SOURCE 200809L
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
@@ -10,30 +10,29 @@
 
 #include "defs.h"
 
-static void create_win(void);
-static int get_current_workspace(void);
-static char** get_workspace_name(int *count);
-static void hdl_dummy(XEvent *xev);
-static void hdl_expose(XEvent *xev);
-static void hdl_property(XEvent *xev);
-static ulong parse_col(const char *hex);
-static void run(void);
-static void setup(void);
-static void xev_cases(XEvent *xev);
+void create_win(void);
+int get_current_workspace(void);
+char** get_workspace_name(int *count);
+void hdl_dummy(XEvent *xev);
+void hdl_expose(XEvent *xev);
+void hdl_property(XEvent *xev);
+ulong parse_col(const char *hex);
+void run(void);
+void setup(void);
+void xev_cases(XEvent *xev);
 
-static EventHandler evtable[LASTEvent];
-static XFontStruct *font;
-static Display *dpy;
-static Window root, win;
-static GC gc;
-static uint scr;
-static ulong fg_col;
-static ulong bg_col;
-static ulong border_col;
+EventHandler evtable[LASTEvent];
+XFontStruct *font;
+Display *dpy;
+Window root, win;
+GC gc;
+uint scr;
+ulong fg_col;
+ulong bg_col;
+ulong border_col;
 #include "config.h"
 
-static void
-create_win(void)
+void create_win(void)
 {
 	int sw = DisplayWidth(dpy, scr);
 	int sh = DisplayHeight(dpy, scr);
@@ -93,8 +92,7 @@ create_win(void)
 	XSetFont(dpy, gc, font->fid);
 }
 
-static int
-get_current_workspace(void)
+int get_current_workspace(void)
 {
 	Atom actual_type;
 	int actual_format;
@@ -112,8 +110,7 @@ get_current_workspace(void)
 	return -1;
 }
 
-static char**
-get_workspace_name(int *count)
+char** get_workspace_name(int *count)
 {
 	Atom actual_type;
 	int actual_format;
@@ -143,14 +140,12 @@ get_workspace_name(int *count)
 	return NULL;
 }
 
-static void
-hdl_dummy(XEvent *xev)
+void hdl_dummy(XEvent *xev)
 {
 	(void) xev;
 }
 
-static void
-hdl_expose(XEvent *xev)
+void hdl_expose(XEvent *xev)
 {
 	(void) xev;
 	XClearWindow(dpy, win);
@@ -187,8 +182,7 @@ hdl_expose(XEvent *xev)
 			SXBAR_VERSION, strlen(SXBAR_VERSION));
 }
 
-static void
-hdl_property(XEvent *xev)
+void hdl_property(XEvent *xev)
 {
 	if (xev->xproperty.atom == XInternAtom(dpy, "_NET_CURRENT_DESKTOP", False)) {
 		XClearWindow(dpy, win);
@@ -198,8 +192,7 @@ hdl_property(XEvent *xev)
 	}
 }
 
-static ulong
-parse_col(const char *hex)
+ulong parse_col(const char *hex)
 {
 	XColor col;
 	Colormap cmap = DefaultColormap(dpy, DefaultScreen(dpy));
@@ -217,8 +210,7 @@ parse_col(const char *hex)
 	return col.pixel;
 }
 
-static void
-run(void)
+void run(void)
 {
 	XEvent xev;
 
@@ -228,8 +220,7 @@ run(void)
 	}
 }
 
-static void
-setup(void)
+void setup(void)
 {
 	if ((dpy = XOpenDisplay(NULL)) == 0)
 		errx(0, "can't open display. quitting...");
@@ -249,8 +240,7 @@ setup(void)
 	create_win();
 }
 
-static void
-xev_cases(XEvent *xev)
+void xev_cases(XEvent *xev)
 {
 	if (xev->type >= 0 && xev->type < LASTEvent)
 		evtable[xev->type](xev);
@@ -258,8 +248,7 @@ xev_cases(XEvent *xev)
 		printf("sxwm: invalid event type: %d\n", xev->type);
 }
 
-int
-main(int ac, char **av)
+int main(int ac, char **av)
 {
 	if (ac > 1) {
 		if (strcmp(av[1], "-v") == 0 || strcmp(av[1], "--version") == 0)
