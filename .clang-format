@@ -14,7 +14,7 @@ BraceWrapping:
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: None
-ColumnLimit: 120
+ColumnLimit: 96
 SortIncludes: false
 SpaceBeforeParens: ControlStatements
 IndentCaseLabels: true

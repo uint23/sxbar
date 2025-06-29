@@ -30,6 +30,7 @@ int scr;
 unsigned long fg_col;
 unsigned long bg_col;
 unsigned long border_col;
+
 #include "config.h"
 
 void create_win(void)
@@ -43,15 +44,18 @@ void create_win(void)
 	int h = BAR_HEIGHT;
 	int y = BOTTOM_BAR ? sh - h - BAR_VERT_PAD - bw : BAR_VERT_PAD;
 
-	XSetWindowAttributes wa = {
-	    .background_pixel = bg_col, .border_pixel = border_col, .event_mask = ExposureMask | ButtonPressMask};
+	XSetWindowAttributes wa = {.background_pixel = bg_col,
+	                           .border_pixel = border_col,
+	                           .event_mask = ExposureMask | ButtonPressMask};
 
-	win = XCreateWindow(dpy, root, x, y, w, h, bw, CopyFromParent, InputOutput, DefaultVisual(dpy, scr),
-	                    CWBackPixel | CWBorderPixel | CWEventMask, &wa);
+	win =
+	    XCreateWindow(dpy, root, x, y, w, h, bw, CopyFromParent, InputOutput,
+	                  DefaultVisual(dpy, scr), CWBackPixel | CWBorderPixel | CWEventMask, &wa);
 
 	Atom A_WM_TYPE = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
 	Atom A_WM_TYPE_DOCK = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
-	XChangeProperty(dpy, win, A_WM_TYPE, XA_ATOM, 32, PropModeReplace, (unsigned char *)&A_WM_TYPE_DOCK, 1);
+	XChangeProperty(dpy, win, A_WM_TYPE, XA_ATOM, 32, PropModeReplace,
+	                (unsigned char *)&A_WM_TYPE_DOCK, 1);
 
 	Atom A_STRUT = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
 	long strut[12] = {0};
@@ -67,15 +71,17 @@ void create_win(void)
 		strut[9] = x + w - 1;
 	}
 
-	XChangeProperty(dpy, win, A_STRUT, XA_CARDINAL, 32, PropModeReplace, (unsigned char *)strut, 12);
+	XChangeProperty(dpy, win, A_STRUT, XA_CARDINAL, 32, PropModeReplace, (unsigned char *)strut,
+	                12);
 
 	XMapRaised(dpy, win);
 
 	gc = XCreateGC(dpy, win, 0, NULL);
 	XSetForeground(dpy, gc, fg_col);
 	font = XLoadQueryFont(dpy, BAR_FONT);
-	if (!font)
+	if (!font) {
 		errx(1, "could not load font");
+	}
 	XSetFont(dpy, gc, font->fid);
 }
 
@@ -87,8 +93,8 @@ int get_current_workspace(void)
 	unsigned char *data = NULL;
 	Atom prop = XInternAtom(dpy, "_NET_CURRENT_DESKTOP", False);
 
-	if (XGetWindowProperty(dpy, root, prop, 0, 1, False, XA_CARDINAL, &actual_type, &actual_format, &nitems,
-	                       &bytes_after, &data) == Success &&
+	if (XGetWindowProperty(dpy, root, prop, 0, 1, False, XA_CARDINAL, &actual_type,
+	                       &actual_format, &nitems, &bytes_after, &data) == Success &&
 	    data) {
 		int ws = *(unsigned long *)data;
 		XFree(data);
@@ -107,8 +113,8 @@ char **get_workspace_name(int *count)
 	Atom prop = XInternAtom(dpy, "_NET_DESKTOP_NAMES", False);
 	Atom utf8 = XInternAtom(dpy, "UTF8_STRING", False);
 
-	if (XGetWindowProperty(dpy, root, prop, 0, (~0L), False, utf8, &actual_type, &actual_format, &nitems, &bytes_after,
-	                       &data) == Success &&
+	if (XGetWindowProperty(dpy, root, prop, 0, (~0L), False, utf8, &actual_type, &actual_format,
+	                       &nitems, &bytes_after, &data) == Success &&
 	    data) {
 
 		char **names = NULL;
@@ -147,10 +153,13 @@ void hdl_expose(XEvent *xev)
 	if (names) {
 		for (int i = 0; i < name_count; ++i) {
 			char label[64];
-			if (i == current_ws)
-				snprintf(label, sizeof(label), "%s%s%s ", BAR_WS_HIGHLIGHT_LEFT, names[i], BAR_WS_HIGHLIGHT_RIGHT);
-			else
+			if (i == current_ws) {
+				snprintf(label, sizeof(label), "%s%s%s ", BAR_WS_HIGHLIGHT_LEFT, names[i],
+				         BAR_WS_HIGHLIGHT_RIGHT);
+			}
+			else {
 				snprintf(label, sizeof(label), "%s ", names[i]);
+			}
 
 			XDrawString(dpy, win, gc, text_x, text_y, label, strlen(label));
 			text_x += XTextWidth(font, label, strlen(label)) + BAR_WS_SPACING;
@@ -206,13 +215,15 @@ void run(void)
 
 void setup(void)
 {
-	if ((dpy = XOpenDisplay(NULL)) == 0)
+	if ((dpy = XOpenDisplay(NULL)) == 0) {
 		errx(0, "can't open display. quitting...");
+	}
 	root = XDefaultRootWindow(dpy);
 	scr = DefaultScreen(dpy);
 
-	for (int i = 0; i < LASTEvent; ++i)
+	for (int i = 0; i < LASTEvent; ++i) {
 		evtable[i] = hdl_dummy;
+	}
 
 	evtable[Expose] = hdl_expose;
 	evtable[PropertyNotify] = hdl_property;
@@ -226,10 +237,12 @@ void setup(void)
 
 void xev_cases(XEvent *xev)
 {
-	if (xev->type >= 0 && xev->type < LASTEvent)
+	if (xev->type >= 0 && xev->type < LASTEvent) {
 		evtable[xev->type](xev);
-	else
+	}
+	else {
 		printf("sxwm: invalid event type: %d\n", xev->type);
+	}
 }
 
 int main(int ac, char **av)
@@ -237,8 +250,9 @@ int main(int ac, char **av)
 	if (ac > 1) {
 		if (strcmp(av[1], "-v") == 0 || strcmp(av[1], "--version") == 0)
 			errx(0, "%s\n%s\n%s", SXBAR_VERSION, SXBAR_AUTHOR, SXBAR_LICINFO);
-		else
+		else {
 			errx(0, "usage:\n[-v || --version]: See the version of sxbar");
+		}
 	}
 
 	setup();
