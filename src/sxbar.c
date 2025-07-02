@@ -12,16 +12,17 @@
 #include "defs.h"
 
 void create_bars(void);
+void draw_bar_content(Window win, int monitor_index);
+int find_window_monitor(Window win);
 int get_current_workspace(void);
 char **get_workspace_name(int *count);
 void hdl_dummy(XEvent *xev);
 void hdl_expose(XEvent *xev);
 void hdl_property(XEvent *xev);
+void init_defaults(void);
 unsigned long parse_col(const char *hex);
 void run(void);
 void setup(void);
-int find_monitor_for_window(Window win);
-void draw_bar_content(Window win, int monitor_index);
 
 EventHandler evtable[LASTEvent];
 XFontStruct *font;
@@ -32,11 +33,7 @@ int nmonitors = 0;
 XineramaScreenInfo *monitors = NULL;
 GC gc;
 int scr;
-unsigned long fg_col;
-unsigned long bg_col;
-unsigned long border_col;
-
-#include "config.h"
+Config config;
 
 void create_bars(void)
 {
@@ -58,23 +55,39 @@ void create_bars(void)
 		monitors[0].height = DisplayHeight(dpy, scr);
 	}
 
+	/* TODO: ADD SUPPORT FOR SELECTING MONITORS */
 	wins = malloc(nmonitors * sizeof(Window));
 
 	for (int i = 0; i < nmonitors; i++) {
-		int bw = BAR_BORDER ? BAR_BORDER_W : 0;
-		int w = monitors[i].width - (2 * BAR_HORI_PAD);
-		int x = monitors[i].x_org + (monitors[i].width - w) / 2;
-		int h = BAR_HEIGHT;
-		int y = BOTTOM_BAR ? monitors[i].y_org + monitors[i].height - h - BAR_VERT_PAD - bw
-		                   : monitors[i].y_org + BAR_VERT_PAD;
+		int bw = config.border ? config.border_width : 0;
+		/* window content width (excluding border) */
+		int w = monitors[i].width - (2 * config.horizontal_padding);
+		/* padding from screen edge */
+		int x = monitors[i].x_org + config.horizontal_padding;
+		int h = config.height;
+		int y;
 
-		XSetWindowAttributes wa = {.background_pixel = bg_col,
-		                           .border_pixel = border_col,
+		if (config.bottom_bar) {
+			y = monitors[i].y_org + monitors[i].height - h - config.vertical_padding - bw;
+		}
+		else {
+			y = monitors[i].y_org + config.vertical_padding;
+		}
+
+		XSetWindowAttributes wa = {.background_pixel = config.background_colour,
+		                           .border_pixel = config.border_colour,
 		                           .event_mask = ExposureMask | ButtonPressMask};
 
 		wins[i] = XCreateWindow(dpy, root, x, y, w, h, bw, CopyFromParent, InputOutput,
 		                        DefaultVisual(dpy, scr),
 		                        CWBackPixel | CWBorderPixel | CWEventMask, &wa);
+
+		XStoreName(dpy, wins[i], "sxbar");
+
+		XClassHint class_hint;
+		class_hint.res_name = "sxbar";
+		class_hint.res_class = "sxbar";
+		XSetClassHint(dpy, wins[i], &class_hint);
 
 		Atom A_WM_TYPE = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
 		Atom A_WM_TYPE_DOCK = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
@@ -84,15 +97,15 @@ void create_bars(void)
 		Atom A_STRUT = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
 		long strut[12] = {0};
 
-		if (BOTTOM_BAR) {
+		if (config.bottom_bar) {
 			strut[3] = h + bw;
 			strut[10] = x;
-			strut[11] = x + w - 1;
+			strut[11] = x + w + (2 * bw) - 1;
 		}
 		else {
 			strut[2] = y + h + bw;
 			strut[8] = x;
-			strut[9] = x + w - 1;
+			strut[9] = x + w + (2 * bw) - 1;
 		}
 
 		XChangeProperty(dpy, wins[i], A_STRUT, XA_CARDINAL, 32, PropModeReplace,
@@ -102,12 +115,82 @@ void create_bars(void)
 	}
 
 	gc = XCreateGC(dpy, wins[0], 0, NULL);
-	XSetForeground(dpy, gc, fg_col);
-	font = XLoadQueryFont(dpy, BAR_FONT);
+	XSetForeground(dpy, gc, config.foreground_colour);
+	font = XLoadQueryFont(dpy, config.font);
 	if (!font) {
 		errx(1, "could not load font");
 	}
 	XSetFont(dpy, gc, font->fid);
+}
+
+void draw_bar_content(Window win, int monitor_index)
+{
+	XClearWindow(dpy, win);
+
+	int current_ws = get_current_workspace();
+	int name_count = 0;
+	char **names = get_workspace_name(&name_count);
+
+	unsigned int text_y = (config.height + font->ascent - font->descent) / 2;
+	const int bg_padding = 5;
+	const int workspace_spacing = 10;
+
+	if (names) {
+		unsigned int *positions = malloc(name_count * sizeof(unsigned int));
+		unsigned int *widths = malloc(name_count * sizeof(unsigned int));
+		unsigned int text_x = config.text_padding + bg_padding;
+
+		/* calculate consistent positions and widths */
+		for (int i = 0; i < name_count; ++i) {
+			char padded_label[64];
+			snprintf(padded_label, sizeof(padded_label), " %s ", names[i]);
+
+			int label_width = XTextWidth(font, padded_label, strlen(padded_label));
+
+			positions[i] = text_x;
+			widths[i] = label_width;
+
+			text_x += label_width + workspace_spacing;
+		}
+
+		/* draw backgrounds and text */
+		for (int i = 0; i < name_count; ++i) {
+			char label[64];
+			/* TODO: ADD ABILITY TO CHANGE WORKSPACE STRING */
+			snprintf(label, sizeof(label), " %s ", names[i]);
+
+			if (i == current_ws) {
+				/* draw highlight background for active workspace */
+				/* TODO: ADD OPTION TO CHANGE SPECIFIC HILIGHT COLOUR */
+				XSetForeground(dpy, gc, config.foreground_colour);
+				XFillRectangle(dpy, win, gc, positions[i] - bg_padding,
+				               text_y - font->ascent - bg_padding, widths[i] + (2 * bg_padding),
+				               font->ascent + font->descent + (2 * bg_padding));
+
+				/* TODO: ADD CUSTOM TEXT COLOURS */
+				XSetForeground(dpy, gc, config.background_colour);
+			}
+			else {
+				XSetForeground(dpy, gc, config.foreground_colour);
+			}
+
+			XDrawString(dpy, win, gc, positions[i], text_y, label, strlen(label));
+			free(names[i]);
+		}
+
+		free(positions);
+		free(widths);
+		free(names);
+	}
+
+	XSetForeground(dpy, gc, config.foreground_colour);
+
+	/* use window content width for version string positioning */
+	int version_width = XTextWidth(font, SXBAR_VERSION, strlen(SXBAR_VERSION));
+	int window_width = monitors[monitor_index].width - (2 * config.horizontal_padding);
+	int version_x = window_width - version_width - config.text_padding - bg_padding;
+
+	XDrawString(dpy, win, gc, version_x, text_y, SXBAR_VERSION, strlen(SXBAR_VERSION));
 }
 
 int get_current_workspace(void)
@@ -145,7 +228,7 @@ char **get_workspace_name(int *count)
 		char **names = NULL;
 		int n = 0;
 		char *p = (char *)data;
-		while (n < 32 && p < (char *)data + nitems) {
+		while (n < MAX_MONITORS && p < (char *)data + nitems) {
 			names = realloc(names, (n + 1) * sizeof(char *));
 			names[n++] = strdup(p);
 			p += strlen(p) + 1;
@@ -163,56 +246,10 @@ void hdl_dummy(XEvent *xev)
 	(void)xev;
 }
 
-int find_monitor_for_window(Window win)
-{
-	for (int i = 0; i < nmonitors; i++) {
-		if (wins[i] == win) {
-			return i;
-		}
-	}
-	return 0; /* fallback to first monitor */
-}
-
-void draw_bar_content(Window win, int monitor_index)
-{
-	XClearWindow(dpy, win);
-
-	int current_ws = get_current_workspace();
-	int name_count = 0;
-	char **names = get_workspace_name(&name_count);
-
-	unsigned int text_y = (BAR_HEIGHT + font->ascent - font->descent) / 2;
-
-	unsigned int text_x = BAR_TEXT_PAD;
-	if (names) {
-		for (int i = 0; i < name_count; ++i) {
-			char label[64];
-			if (i == current_ws) {
-				snprintf(label, sizeof(label), "%s%s%s ", BAR_WS_HIGHLIGHT_LEFT, names[i],
-				         BAR_WS_HIGHLIGHT_RIGHT);
-			}
-			else {
-				snprintf(label, sizeof(label), "%s ", names[i]);
-			}
-
-			XDrawString(dpy, win, gc, text_x, text_y, label, strlen(label));
-			text_x += XTextWidth(font, label, strlen(label)) + BAR_WS_SPACING;
-			free(names[i]);
-		}
-		free(names);
-	}
-
-	int bar_width = monitors[monitor_index].width - (2 * BAR_HORI_PAD);
-	int version_width = XTextWidth(font, SXBAR_VERSION, strlen(SXBAR_VERSION));
-	int version_x = bar_width - version_width - BAR_TEXT_PAD;
-
-	XDrawString(dpy, win, gc, version_x, text_y, SXBAR_VERSION, strlen(SXBAR_VERSION));
-}
-
 void hdl_expose(XEvent *xev)
 {
 	Window win = xev->xexpose.window;
-	int monitor_index = find_monitor_for_window(win);
+	int monitor_index = find_window_monitor(win);
 	draw_bar_content(win, monitor_index);
 }
 
@@ -224,6 +261,32 @@ void hdl_property(XEvent *xev)
 			draw_bar_content(wins[i], i);
 		}
 	}
+}
+
+
+void init_defaults(void)
+{
+	config.bottom_bar = True;
+	config.height = 19;
+	config.vertical_padding = 0;
+	config.horizontal_padding = 0;
+	config.text_padding = 0;
+	config.border = False;
+	config.border_width = 0;
+	config.background_colour = parse_col("#000000");
+	config.foreground_colour = parse_col("#7abccd");
+	config.border_colour = parse_col("#005577");
+	config.font = strdup("fixed");
+}
+
+int find_window_monitor(Window win)
+{
+	for (int i = 0; i < nmonitors; i++) {
+		if (wins[i] == win) {
+			return i;
+		}
+	}
+	return 0; /* fallback to first monitor */
 }
 
 unsigned long parse_col(const char *hex)
@@ -262,6 +325,7 @@ void setup(void)
 	root = XDefaultRootWindow(dpy);
 	scr = DefaultScreen(dpy);
 
+	/* init all events with a dummy */
 	for (int i = 0; i < LASTEvent; ++i) {
 		evtable[i] = hdl_dummy;
 	}
@@ -270,17 +334,17 @@ void setup(void)
 	evtable[PropertyNotify] = hdl_property;
 
 	XSelectInput(dpy, root, PropertyChangeMask);
-	fg_col = parse_col(BAR_COLOR_FG);
-	bg_col = parse_col(BAR_COLOR_BG);
-	border_col = parse_col(BAR_COLOR_BORDER);
+
+	init_defaults();
 	create_bars();
 }
 
 int main(int ac, char **av)
 {
 	if (ac > 1) {
-		if (strcmp(av[1], "-v") == 0 || strcmp(av[1], "--version") == 0)
+		if (strcmp(av[1], "-v") == 0 || strcmp(av[1], "--version") == 0) {
 			errx(0, "%s\n%s\n%s", SXBAR_VERSION, SXBAR_AUTHOR, SXBAR_LICINFO);
+		}
 		else {
 			errx(0, "usage:\n[-v || --version]: See the version of sxbar");
 		}
