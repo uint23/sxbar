@@ -7,10 +7,11 @@
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/extensions/Xinerama.h>
 
 #include "defs.h"
 
-void create_win(void);
+void create_bars(void);
 int get_current_workspace(void);
 char **get_workspace_name(int *count);
 void hdl_dummy(XEvent *xev);
@@ -19,12 +20,16 @@ void hdl_property(XEvent *xev);
 unsigned long parse_col(const char *hex);
 void run(void);
 void setup(void);
-void xev_cases(XEvent *xev);
+int find_monitor_for_window(Window win);
+void draw_bar_content(Window win, int monitor_index);
 
 EventHandler evtable[LASTEvent];
 XFontStruct *font;
 Display *dpy;
-Window root, win;
+Window root;
+Window *wins = NULL;
+int nmonitors = 0;
+XineramaScreenInfo *monitors = NULL;
 GC gc;
 int scr;
 unsigned long fg_col;
@@ -33,50 +38,70 @@ unsigned long border_col;
 
 #include "config.h"
 
-void create_win(void)
+void create_bars(void)
 {
-	int sw = DisplayWidth(dpy, scr);
-	int sh = DisplayHeight(dpy, scr);
+	int xin_active = 0;
 
-	int bw = BAR_BORDER ? BAR_BORDER_W : 0;
-	int w = sw - (2 * BAR_HORI_PAD);
-	int x = (sw - w) / 2;
-	int h = BAR_HEIGHT;
-	int y = BOTTOM_BAR ? sh - h - BAR_VERT_PAD - bw : BAR_VERT_PAD;
-
-	XSetWindowAttributes wa = {.background_pixel = bg_col,
-	                           .border_pixel = border_col,
-	                           .event_mask = ExposureMask | ButtonPressMask};
-
-	win =
-	    XCreateWindow(dpy, root, x, y, w, h, bw, CopyFromParent, InputOutput,
-	                  DefaultVisual(dpy, scr), CWBackPixel | CWBorderPixel | CWEventMask, &wa);
-
-	Atom A_WM_TYPE = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
-	Atom A_WM_TYPE_DOCK = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
-	XChangeProperty(dpy, win, A_WM_TYPE, XA_ATOM, 32, PropModeReplace,
-	                (unsigned char *)&A_WM_TYPE_DOCK, 1);
-
-	Atom A_STRUT = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
-	long strut[12] = {0};
-
-	if (BOTTOM_BAR) {
-		strut[3] = h + bw;
-		strut[10] = x;
-		strut[11] = x + w - 1;
-	}
-	else {
-		strut[2] = y + h + bw;
-		strut[8] = x;
-		strut[9] = x + w - 1;
+	if (XineramaIsActive(dpy)) {
+		monitors = XineramaQueryScreens(dpy, &nmonitors);
+		xin_active = 1;
 	}
 
-	XChangeProperty(dpy, win, A_STRUT, XA_CARDINAL, 32, PropModeReplace, (unsigned char *)strut,
-	                12);
+	/* fallback to single monitor if Xinerama is not available */
+	if (!xin_active || nmonitors <= 0) {
+		nmonitors = 1;
+		monitors = malloc(sizeof(XineramaScreenInfo));
+		monitors[0].screen_number = 0;
+		monitors[0].x_org = 0;
+		monitors[0].y_org = 0;
+		monitors[0].width = DisplayWidth(dpy, scr);
+		monitors[0].height = DisplayHeight(dpy, scr);
+	}
 
-	XMapRaised(dpy, win);
+	wins = malloc(nmonitors * sizeof(Window));
 
-	gc = XCreateGC(dpy, win, 0, NULL);
+	for (int i = 0; i < nmonitors; i++) {
+		int bw = BAR_BORDER ? BAR_BORDER_W : 0;
+		int w = monitors[i].width - (2 * BAR_HORI_PAD);
+		int x = monitors[i].x_org + (monitors[i].width - w) / 2;
+		int h = BAR_HEIGHT;
+		int y = BOTTOM_BAR ? monitors[i].y_org + monitors[i].height - h - BAR_VERT_PAD - bw
+		                   : monitors[i].y_org + BAR_VERT_PAD;
+
+		XSetWindowAttributes wa = {.background_pixel = bg_col,
+		                           .border_pixel = border_col,
+		                           .event_mask = ExposureMask | ButtonPressMask};
+
+		wins[i] = XCreateWindow(dpy, root, x, y, w, h, bw, CopyFromParent, InputOutput,
+		                        DefaultVisual(dpy, scr),
+		                        CWBackPixel | CWBorderPixel | CWEventMask, &wa);
+
+		Atom A_WM_TYPE = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
+		Atom A_WM_TYPE_DOCK = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
+		XChangeProperty(dpy, wins[i], A_WM_TYPE, XA_ATOM, 32, PropModeReplace,
+		                (unsigned char *)&A_WM_TYPE_DOCK, 1);
+
+		Atom A_STRUT = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
+		long strut[12] = {0};
+
+		if (BOTTOM_BAR) {
+			strut[3] = h + bw;
+			strut[10] = x;
+			strut[11] = x + w - 1;
+		}
+		else {
+			strut[2] = y + h + bw;
+			strut[8] = x;
+			strut[9] = x + w - 1;
+		}
+
+		XChangeProperty(dpy, wins[i], A_STRUT, XA_CARDINAL, 32, PropModeReplace,
+		                (unsigned char *)strut, 12);
+
+		XMapRaised(dpy, wins[i]);
+	}
+
+	gc = XCreateGC(dpy, wins[0], 0, NULL);
 	XSetForeground(dpy, gc, fg_col);
 	font = XLoadQueryFont(dpy, BAR_FONT);
 	if (!font) {
@@ -138,9 +163,18 @@ void hdl_dummy(XEvent *xev)
 	(void)xev;
 }
 
-void hdl_expose(XEvent *xev)
+int find_monitor_for_window(Window win)
 {
-	(void)xev;
+	for (int i = 0; i < nmonitors; i++) {
+		if (wins[i] == win) {
+			return i;
+		}
+	}
+	return 0; /* fallback to first monitor */
+}
+
+void draw_bar_content(Window win, int monitor_index)
+{
 	XClearWindow(dpy, win);
 
 	int current_ws = get_current_workspace();
@@ -168,20 +202,27 @@ void hdl_expose(XEvent *xev)
 		free(names);
 	}
 
-	int bar_width = DisplayWidth(dpy, scr) - (2 * BAR_HORI_PAD);
+	int bar_width = monitors[monitor_index].width - (2 * BAR_HORI_PAD);
 	int version_width = XTextWidth(font, SXBAR_VERSION, strlen(SXBAR_VERSION));
 	int version_x = bar_width - version_width - BAR_TEXT_PAD;
 
 	XDrawString(dpy, win, gc, version_x, text_y, SXBAR_VERSION, strlen(SXBAR_VERSION));
 }
 
+void hdl_expose(XEvent *xev)
+{
+	Window win = xev->xexpose.window;
+	int monitor_index = find_monitor_for_window(win);
+	draw_bar_content(win, monitor_index);
+}
+
 void hdl_property(XEvent *xev)
 {
 	if (xev->xproperty.atom == XInternAtom(dpy, "_NET_CURRENT_DESKTOP", False)) {
-		XClearWindow(dpy, win);
-		XEvent expose;
-		expose.type = Expose;
-		evtable[Expose](&expose);
+		/* redraw all bars */
+		for (int i = 0; i < nmonitors; i++) {
+			draw_bar_content(wins[i], i);
+		}
 	}
 }
 
@@ -209,7 +250,7 @@ void run(void)
 
 	for (;;) {
 		XNextEvent(dpy, &xev);
-		xev_cases(&xev);
+		evtable[xev.type](&xev);
 	}
 }
 
@@ -232,17 +273,7 @@ void setup(void)
 	fg_col = parse_col(BAR_COLOR_FG);
 	bg_col = parse_col(BAR_COLOR_BG);
 	border_col = parse_col(BAR_COLOR_BORDER);
-	create_win();
-}
-
-void xev_cases(XEvent *xev)
-{
-	if (xev->type >= 0 && xev->type < LASTEvent) {
-		evtable[xev->type](xev);
-	}
-	else {
-		printf("sxwm: invalid event type: %d\n", xev->type);
-	}
+	create_bars();
 }
 
 int main(int ac, char **av)
