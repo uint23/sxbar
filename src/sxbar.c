@@ -131,7 +131,7 @@ void create_bars(void)
 		Atom A_STRUT = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
 		long strut[12] = {0};
 		if (config.bottom_bar) {
-			strut[3] = h + bw;
+			strut[3] = h + bw + config.vertical_padding;
 			strut[10] = x;
 			strut[11] = x + w + 2 * bw - 1;
 		}
