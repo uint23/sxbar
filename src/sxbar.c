@@ -5,6 +5,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
@@ -317,8 +318,52 @@ void init_defaults(void)
 	config.background_colour = parse_col("#000000");
 	config.foreground_colour = parse_col("#7abccd");
 	config.border_colour = parse_col("#005577");
-	config.font = strdup("fixed");
+	config.font = strdup("terminus-bold-14");
 	init_modules();
+}
+
+char *skip_spaces(char *s)
+{
+	while (isspace(*s))
+		s++;
+	return s;
+}
+
+void parse_config(const char *filepath, Config *config)
+{
+	FILE *config_file;
+	config_file = fopen(filepath, "r");
+
+	if (!config_file) {
+		fprintf(stderr, "Cannot open config %s\n", filepath);
+		return;
+	}
+
+	char line[256];
+
+	while (fgets(line, sizeof line, config_file)) {
+		if (!*line || *line == '#') {
+			continue;
+		}
+
+		char *key = strtok(line, ":");
+		char *value = strtok(NULL, "\n");
+
+        if (!key || !value) {
+            continue;
+        }
+
+		key = skip_spaces(key);
+		value = skip_spaces(value);
+
+		// printf("%s\n", key);
+		// printf("%s\n", value);
+
+        if (!strcmp(key, "bottom_bar")) {
+            printf("processing: %s", key);
+            config->bottom_bar = *value;
+        }
+	}
 }
 
 int find_window_monitor(Window win)
@@ -370,7 +415,7 @@ void init_modules(void)
 	             .cached_output = NULL};
 	/* cpu */
 	config.modules[config.module_count++] =
-		(Module){.name = strdup("cpu"),
+	    (Module){.name = strdup("cpu"),
 	             .command = "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' "
 	                        "| awk '{print 100-$1\"%\"}'",
 	             .enabled = True,
@@ -477,6 +522,7 @@ void setup(void)
 	XSelectInput(dpy, root, PropertyChangeMask);
 
 	init_defaults();
+	parse_config("default_sxbarc", &config);
 	create_bars();
 }
 
