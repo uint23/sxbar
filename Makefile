@@ -49,4 +49,13 @@ uninstall:
 	@rm -f $(DESTDIR)$(MAN_DIR)/$(MAN)
 	@echo "Uninstallation complete."
 
+publish-config:
+	@if [ ! -f "$(HOME)/.config/sxbarc" ]; then \
+		cp default_sxbarc "$(HOME)/.config/sxbarc"; \
+		echo "Published sxbarc to $(HOME)/.config/sxbarc"; \
+	else \
+		echo "$(HOME)/.config/sxbarc already exists, not overwriting."; \
+	fi
+
+
 .PHONY: all clean install uninstall

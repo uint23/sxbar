@@ -1,3 +1,4 @@
+#include <linux/limits.h>
 #define _POSIX_C_SOURCE 200809L
 #include <err.h>
 #include <stdio.h>
@@ -322,6 +323,14 @@ void init_defaults(void)
 	init_modules();
 }
 
+char *get_config_path()
+{
+	char path[PATH_MAX];
+	const char *config_home = getenv("HOME");
+	snprintf(path, sizeof path, "%s/.config/sxbarc", config_home);
+	return strdup(path);
+}
+
 char *skip_spaces(char *s)
 {
 	while (isspace(*s))
@@ -366,48 +375,48 @@ void parse_config(const char *filepath, Config *config)
 		value = skip_spaces(value);
 
 		if (!strcmp(key, "bottom_bar")) {
-            config->bottom_bar = !strcmp(value, "true");
+			config->bottom_bar = !strcmp(value, "true");
 		}
 
-        if (!strcmp(key, "height")) {
-            config->height = atoi(value);
-        }
+		if (!strcmp(key, "height")) {
+			config->height = atoi(value);
+		}
 
-        if (!strcmp(key, "vertical_padding")) {
-            config->vertical_padding = atoi(value);
-        }
+		if (!strcmp(key, "vertical_padding")) {
+			config->vertical_padding = atoi(value);
+		}
 
-        if (!strcmp(key, "horizontal_padding")) {
-            config->horizontal_padding = atoi(value);
-        }
+		if (!strcmp(key, "horizontal_padding")) {
+			config->horizontal_padding = atoi(value);
+		}
 
-        if (!strcmp(key, "text_padding")) {
-            config->text_padding = atoi(value);
-        }
+		if (!strcmp(key, "text_padding")) {
+			config->text_padding = atoi(value);
+		}
 
-        if (!strcmp(key, "border")) {
-            config->border = !strcmp(value, "true");
-        }
+		if (!strcmp(key, "border")) {
+			config->border = !strcmp(value, "true");
+		}
 
-        if (!strcmp(key, "border_width")) {
-            config->border_width = atoi(value);
-        }
+		if (!strcmp(key, "border_width")) {
+			config->border_width = atoi(value);
+		}
 
-        if (!strcmp(key, "background_colour")) {
-            config->background_colour = parse_col(value);
-        }
+		if (!strcmp(key, "background_colour")) {
+			config->background_colour = parse_col(value);
+		}
 
-        if (!strcmp(key, "foreground_colour")) {
-            config->foreground_colour = parse_col(value);
-        }
+		if (!strcmp(key, "foreground_colour")) {
+			config->foreground_colour = parse_col(value);
+		}
 
-        if (!strcmp(key, "border_colour")) {
-            config->border_colour = parse_col(value);
-        }
+		if (!strcmp(key, "border_colour")) {
+			config->border_colour = parse_col(value);
+		}
 
-        if (!strcmp(key, "font")) {
-            config->font = strdup(value);
-        }
+		if (!strcmp(key, "font")) {
+			config->font = strdup(value);
+		}
 	}
 }
 
@@ -567,7 +576,7 @@ void setup(void)
 	XSelectInput(dpy, root, PropertyChangeMask);
 
 	init_defaults();
-	parse_config("default_sxbarc", &config);
+	parse_config(get_config_path(), &config);
 	create_bars();
 }
 
