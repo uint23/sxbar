@@ -8,4 +8,4 @@ border_width        : 0
 background_colour   : #000000
 foreground_colour   : #7abccd
 border_colour       : #005577
-font                : "terminus-bold-14"
+font                : "fixed"
