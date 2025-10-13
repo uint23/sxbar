@@ -318,7 +318,7 @@ void init_defaults(void)
 	config.background_colour = parse_col("#000000");
 	config.foreground_colour = parse_col("#7abccd");
 	config.border_colour = parse_col("#005577");
-	config.font = strdup("terminus-bold-14");
+	config.font = strdup("fixed");
 	init_modules();
 }
 
@@ -326,6 +326,15 @@ char *skip_spaces(char *s)
 {
 	while (isspace(*s))
 		s++;
+
+	if (*s == 0)
+		return s;
+
+	char *end;
+	end = s + strlen(s) - 1;
+	while (end > s && isspace(*end))
+		*end-- = '\0';
+
 	return s;
 }
 
@@ -349,19 +358,55 @@ void parse_config(const char *filepath, Config *config)
 		char *key = strtok(line, ":");
 		char *value = strtok(NULL, "\n");
 
-        if (!key || !value) {
-            continue;
-        }
+		if (!key || !value) {
+			continue;
+		}
 
 		key = skip_spaces(key);
 		value = skip_spaces(value);
 
-		// printf("%s\n", key);
-		// printf("%s\n", value);
+		if (!strcmp(key, "bottom_bar")) {
+            config->bottom_bar = !strcmp(value, "true");
+		}
 
-        if (!strcmp(key, "bottom_bar")) {
-            printf("processing: %s", key);
-            config->bottom_bar = *value;
+        if (!strcmp(key, "height")) {
+            config->height = atoi(value);
+        }
+
+        if (!strcmp(key, "vertical_padding")) {
+            config->vertical_padding = atoi(value);
+        }
+
+        if (!strcmp(key, "horizontal_padding")) {
+            config->horizontal_padding = atoi(value);
+        }
+
+        if (!strcmp(key, "text_padding")) {
+            config->text_padding = atoi(value);
+        }
+
+        if (!strcmp(key, "border")) {
+            config->border = !strcmp(value, "true");
+        }
+
+        if (!strcmp(key, "border_width")) {
+            config->border_width = atoi(value);
+        }
+
+        if (!strcmp(key, "background_colour")) {
+            config->background_colour = parse_col(value);
+        }
+
+        if (!strcmp(key, "foreground_colour")) {
+            config->foreground_colour = parse_col(value);
+        }
+
+        if (!strcmp(key, "border_colour")) {
+            config->border_colour = parse_col(value);
+        }
+
+        if (!strcmp(key, "font")) {
+            config->font = strdup(value);
         }
 	}
 }
