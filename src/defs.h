@@ -9,6 +9,8 @@
 
 #define MAX_MONITORS 32
 
+#define PATH_MAX 4096
+
 typedef struct Module {
 	char *name;
 	char *command;
