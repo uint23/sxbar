@@ -328,7 +328,12 @@ char *get_config_path()
 	char path[PATH_MAX];
 	const char *config_home = getenv("HOME");
 	snprintf(path, sizeof path, "%s/.config/sxbarc", config_home);
-	return strdup(path);
+
+    if (access(path, R_OK) == 0) {
+        return strdup(path);
+    }
+
+	return strdup("/usr/local/share/sxbarc");
 }
 
 char *skip_spaces(char *s)
