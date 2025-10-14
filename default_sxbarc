@@ -1,0 +1,11 @@
+bottom_bar          : true
+height              : 19
+vertical_padding    : 0
+horizontal_padding  : 0
+text_padding        : 0
+border              : false
+border_width        : 0
+background_colour   : #000000
+foreground_colour   : #7abccd
+border_colour       : #005577
+font                : fixed

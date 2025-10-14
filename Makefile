@@ -49,4 +49,5 @@ uninstall:
 	@rm -f $(DESTDIR)$(MAN_DIR)/$(MAN)
 	@echo "Uninstallation complete."
 
+
 .PHONY: all clean install uninstall

@@ -5,6 +5,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
@@ -321,6 +322,111 @@ void init_defaults(void)
 	init_modules();
 }
 
+char *get_config_path()
+{
+	char path[PATH_MAX];
+	const char *config_home = getenv("HOME");
+	snprintf(path, sizeof path, "%s/.config/sxbarc", config_home);
+
+	if (access(path, R_OK) == 0) {
+		return strdup(path);
+	}
+
+	return strdup("/usr/local/share/sxbarc");
+}
+
+char *skip_spaces(char *s)
+{
+	while (isspace(*s)) {
+		s++;
+	}
+
+	if (*s == 0) {
+		return s;
+	}
+
+	char *end;
+	end = s + strlen(s) - 1;
+	while (end > s && isspace(*end)) {
+		*end-- = '\0';
+	}
+
+	return s;
+}
+
+void parse_config(const char *filepath, Config *config)
+{
+	FILE *config_file;
+	config_file = fopen(filepath, "r");
+
+	if (!config_file) {
+		fprintf(stderr, "Cannot open config %s\n", filepath);
+		return;
+	}
+
+	char line[256];
+
+	while (fgets(line, sizeof line, config_file)) {
+		if (!*line || *line == '#') {
+			continue;
+		}
+
+		char *key = strtok(line, ":");
+		char *value = strtok(NULL, "\n");
+
+		if (!key || !value) {
+			continue;
+		}
+
+		key = skip_spaces(key);
+		value = skip_spaces(value);
+
+		if (!strcmp(key, "bottom_bar")) {
+			config->bottom_bar = !strcmp(value, "true");
+		}
+
+		if (!strcmp(key, "height")) {
+			config->height = atoi(value);
+		}
+
+		if (!strcmp(key, "vertical_padding")) {
+			config->vertical_padding = atoi(value);
+		}
+
+		if (!strcmp(key, "horizontal_padding")) {
+			config->horizontal_padding = atoi(value);
+		}
+
+		if (!strcmp(key, "text_padding")) {
+			config->text_padding = atoi(value);
+		}
+
+		if (!strcmp(key, "border")) {
+			config->border = !strcmp(value, "true");
+		}
+
+		if (!strcmp(key, "border_width")) {
+			config->border_width = atoi(value);
+		}
+
+		if (!strcmp(key, "background_colour")) {
+			config->background_colour = parse_col(value);
+		}
+
+		if (!strcmp(key, "foreground_colour")) {
+			config->foreground_colour = parse_col(value);
+		}
+
+		if (!strcmp(key, "border_colour")) {
+			config->border_colour = parse_col(value);
+		}
+
+		if (!strcmp(key, "font")) {
+			config->font = strdup(value);
+		}
+	}
+}
+
 int find_window_monitor(Window win)
 {
 	for (int i = 0; i < nmonitors; i++) {
@@ -370,7 +476,7 @@ void init_modules(void)
 	             .cached_output = NULL};
 	/* cpu */
 	config.modules[config.module_count++] =
-		(Module){.name = strdup("cpu"),
+	    (Module){.name = strdup("cpu"),
 	             .command = "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' "
 	                        "| awk '{print 100-$1\"%\"}'",
 	             .enabled = True,
@@ -477,6 +583,7 @@ void setup(void)
 	XSelectInput(dpy, root, PropertyChangeMask);
 
 	init_defaults();
+	parse_config(get_config_path(), &config);
 	create_bars();
 }
 
