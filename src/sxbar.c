@@ -328,25 +328,28 @@ char *get_config_path()
 	const char *config_home = getenv("HOME");
 	snprintf(path, sizeof path, "%s/.config/sxbarc", config_home);
 
-    if (access(path, R_OK) == 0) {
-        return strdup(path);
-    }
+	if (access(path, R_OK) == 0) {
+		return strdup(path);
+	}
 
 	return strdup("/usr/local/share/sxbarc");
 }
 
 char *skip_spaces(char *s)
 {
-	while (isspace(*s))
+	while (isspace(*s)) {
 		s++;
+	}
 
-	if (*s == 0)
+	if (*s == 0) {
 		return s;
+	}
 
 	char *end;
 	end = s + strlen(s) - 1;
-	while (end > s && isspace(*end))
+	while (end > s && isspace(*end)) {
 		*end-- = '\0';
+	}
 
 	return s;
 }
