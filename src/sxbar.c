@@ -320,7 +320,7 @@ void init_defaults(void)
 	config.foreground_colour = parse_col("#7abccd");
 	config.border_colour = parse_col("#005577");
 	config.font = strdup("fixed");
-	init_modules();
+    config.enabled_modules = strdup("clock,date,battery,volume,cpu,version");
 }
 
 char *get_config_path()
@@ -427,7 +427,7 @@ void parse_config(const char *filepath, Config *config)
 		}
 
 		if (!strcmp(key, "enabled_modules")) {
-			config->enabled_modules = parse_list(value);
+			config->enabled_modules = strdup(value);
 		}
 	}
 }
@@ -616,6 +616,7 @@ void setup(void)
 
 	init_defaults();
 	parse_config(get_config_path(), &config);
+    init_modules();
 	create_bars();
 }
 
