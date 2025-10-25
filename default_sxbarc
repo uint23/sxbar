@@ -9,3 +9,4 @@ background_colour   : #000000
 foreground_colour   : #7abccd
 border_colour       : #005577
 font                : fixed
+enabled_modules     : clock,date,battery,volume,cpu,version

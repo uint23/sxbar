@@ -35,6 +35,7 @@ typedef struct Config {
 	Module *modules;
 	int module_count;
 	int max_modules;
+    char **enabled_modules;
 } Config;
 
 typedef void (*EventHandler)(XEvent *);

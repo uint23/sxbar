@@ -32,6 +32,7 @@ void run(void);
 char *run_command(const char *cmd);
 void setup(void);
 void update_modules(void);
+char **parse_list(char *s);
 
 EventHandler evtable[LASTEvent];
 XFontStruct *font;
@@ -424,6 +425,10 @@ void parse_config(const char *filepath, Config *config)
 		if (!strcmp(key, "font")) {
 			config->font = strdup(value);
 		}
+
+		if (!strcmp(key, "enabled_modules")) {
+			config->enabled_modules = parse_list(value);
+		}
 	}
 }
 
@@ -483,6 +488,33 @@ void init_modules(void)
 	             .refresh_interval = 3,
 	             .last_update = 0,
 	             .cached_output = NULL};
+}
+
+char **parse_list(char *s)
+{
+	int count = 0;
+	char *tmp = strdup(s);
+	char *token = strtok(tmp, ",");
+
+	while (token != NULL) {
+		printf("%s\n", token);
+		count++;
+		token = strtok(NULL, ",");
+	}
+	free(tmp);
+
+	printf("%i\n", count);
+
+	char **list = malloc((count + 1) * sizeof(char *));
+	int i = 0;
+	token = strtok(s, ",");
+
+	while (token != NULL && i < count) {
+		list[i++] = strdup(token);
+		token = strtok(NULL, ",");
+	}
+
+	return list;
 }
 
 unsigned long parse_col(const char *hex)
