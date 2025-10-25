@@ -209,7 +209,7 @@ static void draw_bar_into(Drawable draw, int monitor_index)
 	/* modules */
 	int total_mw = 0;
 	for (int i = 0; i < config.module_count; i++) {
-		if (!config.modules[i].enabled || !config.modules[i].cached_output) {
+		if (!config.modules[i].cached_output) {
 			continue;
 		}
 		total_mw += XTextWidth(font, config.modules[i].cached_output,
@@ -220,7 +220,7 @@ static void draw_bar_into(Drawable draw, int monitor_index)
 	int mx = w - total_mw - ver_w - 2 * config.text_padding - 2 * pad;
 
 	for (int i = 0; i < config.module_count; i++) {
-		if (!config.modules[i].enabled || !config.modules[i].cached_output) {
+		if (!config.modules[i].cached_output) {
 			continue;
 		}
 		char *out = config.modules[i].cached_output;
@@ -456,7 +456,6 @@ void init_modules(void)
 			/* clock */
 			config.modules[config.module_count++] = (Module){.name = strdup("clock"),
 			                                                 .command = "date '+%H:%M:%S'",
-			                                                 .enabled = True,
 			                                                 .refresh_interval = 1,
 			                                                 .last_update = 0,
 			                                                 .cached_output = NULL};
@@ -465,7 +464,6 @@ void init_modules(void)
 			/* date */
 			config.modules[config.module_count++] = (Module){.name = strdup("date"),
 			                                                 .command = "date '+%Y-%m-%d'",
-			                                                 .enabled = True,
 			                                                 .refresh_interval = 60,
 			                                                 .last_update = 0,
 			                                                 .cached_output = NULL};
@@ -476,7 +474,6 @@ void init_modules(void)
 			    .name = strdup("battery"),
 			    .command = "cat /sys/class/power_supply/BAT0/capacity 2>/dev/null | sed "
 			               "'s/$/%/' || echo 'N/A'",
-			    .enabled = True,
 			    .refresh_interval = 30,
 			    .last_update = 0,
 			    .cached_output = NULL};
@@ -486,7 +483,6 @@ void init_modules(void)
 			config.modules[config.module_count++] = (Module){
 			    .name = strdup("volume"),
 			    .command = "amixer get Master | grep -o '[0-9]*%' | head -1 || echo 'N/A'",
-			    .enabled = True,
 			    .refresh_interval = 5,
 			    .last_update = 0,
 			    .cached_output = NULL};
@@ -497,7 +493,6 @@ void init_modules(void)
 			    .name = strdup("cpu"),
 			    .command = "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' "
 			               "| awk '{print 100-$1\"%\"}'",
-			    .enabled = True,
 			    .refresh_interval = 3,
 			    .last_update = 0,
 			    .cached_output = NULL};
@@ -580,9 +575,6 @@ void update_modules(void)
 	time_t now = time(NULL);
 	for (int i = 0; i < config.module_count; i++) {
 		Module *m = &config.modules[i];
-		if (!m->enabled) {
-			continue;
-		}
 		if (now - m->last_update >= m->refresh_interval) {
 			free(m->cached_output);
 			m->cached_output = run_command(m->command);

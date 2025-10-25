@@ -14,7 +14,6 @@
 typedef struct Module {
 	char *name;
 	char *command;
-	int enabled;
 	int refresh_interval;
 	time_t last_update;
 	char *cached_output;
