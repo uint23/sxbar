@@ -32,7 +32,6 @@ void run(void);
 char *run_command(const char *cmd);
 void setup(void);
 void update_modules(void);
-char **parse_list(char *s);
 
 EventHandler evtable[LASTEvent];
 XFontStruct *font;
@@ -320,7 +319,7 @@ void init_defaults(void)
 	config.foreground_colour = parse_col("#7abccd");
 	config.border_colour = parse_col("#005577");
 	config.font = strdup("fixed");
-    config.enabled_modules = strdup("clock,date,battery,volume,cpu,version");
+	config.enabled_modules = strdup("clock,date,volume,cpu");
 }
 
 char *get_config_path()
@@ -448,73 +447,66 @@ void init_modules(void)
 	config.modules = malloc(config.max_modules * sizeof(Module));
 	config.module_count = 0;
 
-	/* clock */
-	config.modules[config.module_count++] = (Module){.name = strdup("clock"),
-	                                                 .command = "date '+%H:%M:%S'",
-	                                                 .enabled = True,
-	                                                 .refresh_interval = 1,
-	                                                 .last_update = 0,
-	                                                 .cached_output = NULL};
-	/* date */
-	config.modules[config.module_count++] = (Module){.name = strdup("date"),
-	                                                 .command = "date '+%Y-%m-%d'",
-	                                                 .enabled = True,
-	                                                 .refresh_interval = 60,
-	                                                 .last_update = 0,
-	                                                 .cached_output = NULL};
-	/* battery */
-	config.modules[config.module_count++] =
-	    (Module){.name = strdup("battery"),
-	             .command = "cat /sys/class/power_supply/BAT0/capacity 2>/dev/null | sed "
-	                        "'s/$/%/' || echo 'N/A'",
-	             .enabled = False,
-	             .refresh_interval = 30,
-	             .last_update = 0,
-	             .cached_output = NULL};
-	/* volume */
-	config.modules[config.module_count++] =
-	    (Module){.name = strdup("volume"),
-	             .command = "amixer get Master | grep -o '[0-9]*%' | head -1 || echo 'N/A'",
-	             .enabled = True,
-	             .refresh_interval = 5,
-	             .last_update = 0,
-	             .cached_output = NULL};
-	/* cpu */
-	config.modules[config.module_count++] =
-	    (Module){.name = strdup("cpu"),
-	             .command = "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' "
-	                        "| awk '{print 100-$1\"%\"}'",
-	             .enabled = True,
-	             .refresh_interval = 3,
-	             .last_update = 0,
-	             .cached_output = NULL};
-}
+	const char sep[2] = ",";
+	char *enabled_modules = strdup(config.enabled_modules);
+	char *module_name = strtok(enabled_modules, sep);
 
-char **parse_list(char *s)
-{
-	int count = 0;
-	char *tmp = strdup(s);
-	char *token = strtok(tmp, ",");
+	while (module_name != NULL) {
+		if (!strcmp(module_name, "clock")) {
+			/* clock */
+			config.modules[config.module_count++] = (Module){.name = strdup("clock"),
+			                                                 .command = "date '+%H:%M:%S'",
+			                                                 .enabled = True,
+			                                                 .refresh_interval = 1,
+			                                                 .last_update = 0,
+			                                                 .cached_output = NULL};
+		}
+		else if (!strcmp(module_name, "date")) {
+			/* date */
+			config.modules[config.module_count++] = (Module){.name = strdup("date"),
+			                                                 .command = "date '+%Y-%m-%d'",
+			                                                 .enabled = True,
+			                                                 .refresh_interval = 60,
+			                                                 .last_update = 0,
+			                                                 .cached_output = NULL};
+		}
+		else if (!strcmp(module_name, "battery")) {
+			/* battery */
+			config.modules[config.module_count++] = (Module){
+			    .name = strdup("battery"),
+			    .command = "cat /sys/class/power_supply/BAT0/capacity 2>/dev/null | sed "
+			               "'s/$/%/' || echo 'N/A'",
+			    .enabled = True,
+			    .refresh_interval = 30,
+			    .last_update = 0,
+			    .cached_output = NULL};
+		}
+		else if (!strcmp(module_name, "volume")) {
+			/* volume */
+			config.modules[config.module_count++] = (Module){
+			    .name = strdup("volume"),
+			    .command = "amixer get Master | grep -o '[0-9]*%' | head -1 || echo 'N/A'",
+			    .enabled = True,
+			    .refresh_interval = 5,
+			    .last_update = 0,
+			    .cached_output = NULL};
+		}
+		else if (!strcmp(module_name, "cpu")) {
+			/* cpu */
+			config.modules[config.module_count++] = (Module){
+			    .name = strdup("cpu"),
+			    .command = "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' "
+			               "| awk '{print 100-$1\"%\"}'",
+			    .enabled = True,
+			    .refresh_interval = 3,
+			    .last_update = 0,
+			    .cached_output = NULL};
+		}
 
-	while (token != NULL) {
-		printf("%s\n", token);
-		count++;
-		token = strtok(NULL, ",");
-	}
-	free(tmp);
-
-	printf("%i\n", count);
-
-	char **list = malloc((count + 1) * sizeof(char *));
-	int i = 0;
-	token = strtok(s, ",");
-
-	while (token != NULL && i < count) {
-		list[i++] = strdup(token);
-		token = strtok(NULL, ",");
+		module_name = strtok(NULL, sep);
 	}
 
-	return list;
+    free(module_name);
 }
 
 unsigned long parse_col(const char *hex)
@@ -616,7 +608,7 @@ void setup(void)
 
 	init_defaults();
 	parse_config(get_config_path(), &config);
-    init_modules();
+	init_modules();
 	create_bars();
 }
 
