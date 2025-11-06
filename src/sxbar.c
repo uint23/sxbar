@@ -13,8 +13,8 @@
 #include <X11/Xft/Xft.h>
 
 #include "defs.h"
+#include "modules.h"
 
-void cleanup_modules(void);
 void cleanup_resources(void);
 void create_bars(void);
 void draw_bar_into(Drawable draw, int monitor_index);
@@ -26,12 +26,9 @@ void hdl_dummy(XEvent *xev);
 void hdl_expose(XEvent *xev);
 void hdl_property(XEvent *xev);
 void init_defaults(void);
-void init_modules(void);
 unsigned long parse_col(const char *hex);
 void run(void);
-char *run_command(const char *cmd);
 void setup(void);
-void update_modules(void);
 int xft_text_width(const char *s);
 
 #include "parser.h"
@@ -48,16 +45,6 @@ Pixmap *buffers = NULL;
 int n_monitors = 0;
 int scr;
 XftColor xft_fg, xft_bg;
-
-void cleanup_modules(void)
-{
-	for (int i = 0; i < config.module_count; i++) {
-		free(config.modules[i].name);
-		free(config.modules[i].command);
-		free(config.modules[i].cached_output);
-	}
-	free(config.modules);
-}
 
 void cleanup_resources(void)
 {
@@ -212,7 +199,9 @@ int xft_text_width(const char *s)
 {
 	XGlyphInfo ext;
 	XftTextExtentsUtf8(dpy, font, (const FcChar8 *)s, strlen(s), &ext);
-	return ext.xOff;
+
+	int ink_right = ext.x + (int)ext.width;
+	return ink_right > (int)ext.xOff ? ink_right : (int)ext.xOff;
 }
 
 void draw_bar_into(Drawable draw, int monitor_index)
@@ -249,14 +238,20 @@ void draw_bar_into(Drawable draw, int monitor_index)
 			snprintf(tmp, sizeof tmp, " %s ", names[i]);
 			if (i == current_ws) {
 				XSetForeground(dpy, gc, config.foreground_colour);
-				XFillRectangle(dpy, draw, gc, pos[i] - pad, text_y - font->ascent - pad,
-				               wd[i] + 2 * pad, font->ascent + font->descent + 2 * pad);
-				XftDrawStringUtf8(xd, &xft_bg, font, pos[i], text_y,
-				                  (const FcChar8 *)tmp, strlen(tmp));
+				XFillRectangle(
+					dpy, draw, gc, pos[i] - pad, text_y - font->ascent - pad,
+					wd[i] + 2 * pad, font->ascent + font->descent + 2 * pad
+				);
+				XftDrawStringUtf8(
+					xd, &xft_bg, font, pos[i], text_y,
+					(const FcChar8 *)tmp, strlen(tmp)
+				);
 			}
 			else {
-				XftDrawStringUtf8(xd, &xft_fg, font, pos[i], text_y,
-				                  (const FcChar8 *)tmp, strlen(tmp));
+				XftDrawStringUtf8(
+					xd, &xft_fg, font, pos[i], text_y,
+					(const FcChar8 *)tmp, strlen(tmp)
+				);
 			}
 			free(names[i]);
 		}
@@ -275,8 +270,7 @@ void draw_bar_into(Drawable draw, int monitor_index)
 		}
 		total_mw += xft_text_width(config.modules[i].cached_output) + mod_sp;
 	}
-	int ver_w = xft_text_width(SXBAR_VERSION);
-	int mx = w - total_mw - ver_w - 2 * config.text_padding - 2 * pad;
+	int mx = w - total_mw - 2 * config.text_padding - 2 * pad;
 
 	for (int i = 0; i < config.module_count; i++) {
 		if (!config.modules[i].enabled || !config.modules[i].cached_output) {
@@ -287,11 +281,6 @@ void draw_bar_into(Drawable draw, int monitor_index)
 		XftDrawStringUtf8(xd, &xft_fg, font, mx, text_y, (const FcChar8 *)out, strlen(out));
 		mx += tw + mod_sp;
 	}
-
-	/* version */
-	int vx = w - ver_w - config.text_padding - pad;
-	XftDrawStringUtf8(xd, &xft_fg, font, vx, text_y,
-	                  (const FcChar8 *)SXBAR_VERSION, strlen(SXBAR_VERSION));
 
 	XftDrawDestroy(xd);
 }
@@ -311,9 +300,8 @@ int get_current_workspace(void)
 	int fmt;
 	unsigned long n, after;
 	unsigned char *data = NULL;
-	if (XGetWindowProperty(dpy, root, at, 0, 1, False, XA_CARDINAL, &ret_type, &fmt, &n, &after,
-	                       &data) == Success &&
-	    data) {
+	if (XGetWindowProperty(dpy, root, at, 0, 1, False, XA_CARDINAL,
+		&ret_type, &fmt, &n, &after, &data) == Success && data) {
 		int ws = *(unsigned long *)data;
 		XFree(data);
 		return ws;
@@ -329,9 +317,8 @@ char **get_workspace_name(int *count)
 	int fmt;
 	unsigned long n, after;
 	unsigned char *data = NULL;
-	if (XGetWindowProperty(dpy, root, at, 0, (~0L), False, utf8, &ret_type, &fmt, &n, &after,
-	                       &data) == Success &&
-	    data) {
+	if (XGetWindowProperty(dpy, root, at, 0, (~0L), False, utf8,
+		&ret_type, &fmt, &n, &after, &data) == Success && data) {
 		char **names = NULL;
 		int idx = 0;
 		char *p = (char *)data;
@@ -395,65 +382,6 @@ int find_window_monitor(Window win)
 	return 0;
 }
 
-void init_modules(void)
-{
-	config.max_modules = 10;
-	config.modules = malloc(config.max_modules * sizeof(Module));
-	config.module_count = 0;
-
-	/* clock */
-	config.modules[config.module_count++] = (Module){
-		.name = strdup("clock"),
-		.command = strdup("date '+%H:%M:%S'"),
-		.enabled = True,
-		.refresh_interval = 1,
-		.last_update = 0,
-		.cached_output = NULL
-	};
-
-	/* date */
-	config.modules[config.module_count++] = (Module){
-		.name = strdup("date"),
-		.command = strdup("date '+%Y-%m-%d'"),
-		.enabled = True,
-		.refresh_interval = 60,
-		.last_update = 0,
-		.cached_output = NULL
-	};
-
-	/* battery */
-	config.modules[config.module_count++] = (Module){
-		.name = strdup("battery"),
-		.command = strdup("cat /sys/class/power_supply/BAT0/capacity 2>/dev/null | sed "
-				"'s/$/%/' || echo 'N/A'"),
-		.enabled = False,
-		.refresh_interval = 30,
-		.last_update = 0,
-		.cached_output = NULL
-	};
-
-	/* volume */
-	config.modules[config.module_count++] = (Module){
-		.name = strdup("volume"),
-	    .command = strdup("amixer get Master | grep -o '[0-9]*%' | head -1 || echo 'N/A'"),
-		.enabled = True,
-		.refresh_interval = 5,
-		.last_update = 0,
-		.cached_output = NULL
-	};
-
-	/* cpu */
-	config.modules[config.module_count++] = (Module){
-		.name = strdup("cpu"),
-		.command = strdup("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' "
-				"| awk '{print 100-$1\"%\"}'"),
-		.enabled = True,
-		.refresh_interval = 3,
-		.last_update = 0,
-		.cached_output = NULL
-	};
-}
-
 unsigned long parse_col(const char *hex)
 {
 	XColor col;
@@ -485,54 +413,6 @@ void run(void)
 		}
 		struct timespec ts = {0, 100000000};
 		nanosleep(&ts, NULL);
-	}
-}
-
-char *run_command(const char *cmd)
-{
-	FILE *fp = popen(cmd, "r");
-	if (!fp) {
-		return strdup("N/A");
-	}
-
-	char buffer[1024];
-	char *res = NULL;
-	size_t len = 0;
-
-	while (fgets(buffer, sizeof buffer, fp)) {
-		size_t l = strlen(buffer);
-		if (buffer[l - 1] == '\n') {
-			buffer[--l] = '\0';
-		}
-		if (!res) {
-			res = malloc(l + 1);
-			strcpy(res, buffer);
-			len = l;
-		}
-		else {
-			res = realloc(res, len + l + 2);
-			strcat(res, " ");
-			strcat(res, buffer);
-			len += l + 1;
-		}
-	}
-	pclose(fp);
-	return res ? res : strdup("");
-}
-
-void update_modules(void)
-{
-	time_t now = time(NULL);
-	for (int i = 0; i < config.module_count; i++) {
-		Module *m = &config.modules[i];
-		if (!m->enabled) {
-			continue;
-		}
-		if (now - m->last_update >= m->refresh_interval) {
-			free(m->cached_output);
-			m->cached_output = run_command(m->command);
-			m->last_update = now;
-		}
 	}
 }
 
@@ -571,7 +451,6 @@ int main(int ac, char **av)
 	run();
 
 	/* TODO?: never reached */
-	cleanup_modules();
 	cleanup_resources();
 	return 0;
 }
