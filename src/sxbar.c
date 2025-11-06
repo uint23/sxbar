@@ -17,8 +17,8 @@
 void cleanup_modules(void);
 void cleanup_resources(void);
 void create_bars(void);
-static void draw_bar_into(Drawable draw, int monitor_index);
-static void redraw_monitor(int monitor_index);
+void draw_bar_into(Drawable draw, int monitor_index);
+void redraw_monitor(int monitor_index);
 int find_window_monitor(Window win);
 int get_current_workspace(void);
 char **get_workspace_name(int *count);
@@ -32,7 +32,7 @@ void run(void);
 char *run_command(const char *cmd);
 void setup(void);
 void update_modules(void);
-static int xft_text_width(const char *s);
+int xft_text_width(const char *s);
 
 #include "parser.h"
 
@@ -128,8 +128,8 @@ void create_bars(void)
 		                        CWBackPixel | CWBorderPixel | CWEventMask, &wa);
 
 		XStoreName(dpy, wins[i], "sxbar");
-		static char res_name[] = "sxbar";
-		static char res_class[] = "sxbar";
+		char res_name[] = "sxbar";
+		char res_class[] = "sxbar";
 		XClassHint ch = {res_name, res_class};
 		XSetClassHint(dpy, wins[i], &ch);
 
@@ -185,14 +185,14 @@ void create_bars(void)
 	}
 }
 
-static int xft_text_width(const char *s)
+int xft_text_width(const char *s)
 {
 	XGlyphInfo ext;
 	XftTextExtentsUtf8(dpy, font, (const FcChar8 *)s, strlen(s), &ext);
 	return ext.xOff;
 }
 
-static void draw_bar_into(Drawable draw, int monitor_index)
+void draw_bar_into(Drawable draw, int monitor_index)
 {
 	int w = monitors[monitor_index].width - 2 * config.horizontal_padding;
 	int h = config.height;
@@ -273,7 +273,7 @@ static void draw_bar_into(Drawable draw, int monitor_index)
 	XftDrawDestroy(xd);
 }
 
-static void redraw_monitor(int i)
+void redraw_monitor(int i)
 {
 	int w = monitors[i].width - 2 * config.horizontal_padding;
 	int h = config.height;
