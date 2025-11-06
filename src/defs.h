@@ -3,7 +3,7 @@
 #include <X11/Xlib.h>
 #include <time.h>
 
-#define SXBAR_VERSION	"sxbar ver. 1.0"
+#define SXBAR_VERSION	"sxbar ver. 1.1"
 #define SXBAR_AUTHOR	"(C) Abhinav Prasai 2025"
 #define SXBAR_LICINFO	"See LICENSE for more info"
 
