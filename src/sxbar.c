@@ -5,12 +5,12 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <ctype.h>
 
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/extensions/Xinerama.h>
+#include <X11/Xft/Xft.h>
 
 #include "defs.h"
 
@@ -32,9 +32,12 @@ void run(void);
 char *run_command(const char *cmd);
 void setup(void);
 void update_modules(void);
+static int xft_text_width(const char *s);
+
+#include "parser.h"
 
 EventHandler evtable[LASTEvent];
-XFontStruct *font;
+XftFont *font;
 Display *dpy;
 Window root;
 Window *wins = NULL;
@@ -44,6 +47,7 @@ Config config;
 Pixmap *buffers = NULL;
 int nmonitors = 0;
 int scr;
+XftColor xft_fg, xft_bg;
 
 void cleanup_modules(void)
 {
@@ -73,7 +77,11 @@ void cleanup_resources(void)
 		XFree(monitors);
 	}
 	if (font) {
-		XFreeFont(dpy, font);
+		XftFontClose(dpy, font);
+	}
+	if (dpy) {
+		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_fg);
+		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_bg);
 	}
 	if (gc) {
 		XFreeGC(dpy, gc);
@@ -108,8 +116,7 @@ void create_bars(void)
 		int w = monitors[i].width - 2 * config.horizontal_padding;
 		int h = config.height;
 		int x = monitors[i].x_org + config.horizontal_padding;
-		int y = config.bottom_bar
-		            ? monitors[i].y_org + monitors[i].height - h - config.vertical_padding - bw
+		int y = config.bottom_bar ? monitors[i].y_org + monitors[i].height - h - config.vertical_padding - bw
 		            : monitors[i].y_org + config.vertical_padding;
 
 		XSetWindowAttributes wa = {.background_pixel = config.background_colour,
@@ -121,7 +128,9 @@ void create_bars(void)
 		                        CWBackPixel | CWBorderPixel | CWEventMask, &wa);
 
 		XStoreName(dpy, wins[i], "sxbar");
-		XClassHint ch = {"sxbar", "sxbar"};
+		static char res_name[] = "sxbar";
+		static char res_class[] = "sxbar";
+		XClassHint ch = {res_name, res_class};
 		XSetClassHint(dpy, wins[i], &ch);
 
 		Atom A_WM_TYPE = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
@@ -150,11 +159,37 @@ void create_bars(void)
 
 	gc = XCreateGC(dpy, wins[0], 0, NULL);
 	XSetForeground(dpy, gc, config.foreground_colour);
-	font = XLoadQueryFont(dpy, config.font);
+	font = XftFontOpenName(dpy, scr, config.font);
 	if (!font) {
 		errx(1, "could not load font %s", config.font);
 	}
-	XSetFont(dpy, gc, font->fid);
+
+	{
+		Colormap cmap = DefaultColormap(dpy, scr);
+		XColor xc;
+		XRenderColor rc;
+
+		xc.pixel = config.foreground_colour;
+		XQueryColor(dpy, cmap, &xc);
+		rc.red = xc.red; rc.green = xc.green; rc.blue = xc.blue; rc.alpha = 0xffff;
+		if (!XftColorAllocValue(dpy, DefaultVisual(dpy, scr), cmap, &rc, &xft_fg)) {
+			errx(1, "could not alloc xft fg");
+		}
+
+		xc.pixel = config.background_colour;
+		XQueryColor(dpy, cmap, &xc);
+		rc.red = xc.red; rc.green = xc.green; rc.blue = xc.blue; rc.alpha = 0xffff;
+		if (!XftColorAllocValue(dpy, DefaultVisual(dpy, scr), cmap, &rc, &xft_bg)) {
+			errx(1, "could not alloc xft bg");
+		}
+	}
+}
+
+static int xft_text_width(const char *s)
+{
+	XGlyphInfo ext;
+	XftTextExtentsUtf8(dpy, font, (const FcChar8 *)s, strlen(s), &ext);
+	return ext.xOff;
 }
 
 static void draw_bar_into(Drawable draw, int monitor_index)
@@ -164,6 +199,8 @@ static void draw_bar_into(Drawable draw, int monitor_index)
 	/* clear */
 	XSetForeground(dpy, gc, config.background_colour);
 	XFillRectangle(dpy, draw, gc, 0, 0, w, h);
+
+	XftDraw *xd = XftDrawCreate(dpy, draw, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr));
 
 	int current_ws = get_current_workspace();
 	int name_count = 0;
@@ -180,7 +217,7 @@ static void draw_bar_into(Drawable draw, int monitor_index)
 		for (int i = 0; i < name_count; i++) {
 			char tmp[64];
 			snprintf(tmp, sizeof tmp, " %s ", names[i]);
-			wd[i] = XTextWidth(font, tmp, strlen(tmp));
+			wd[i] = xft_text_width(tmp);
 			pos[i] = cur_x;
 			cur_x += wd[i] + ws_sp;
 		}
@@ -191,12 +228,13 @@ static void draw_bar_into(Drawable draw, int monitor_index)
 				XSetForeground(dpy, gc, config.foreground_colour);
 				XFillRectangle(dpy, draw, gc, pos[i] - pad, text_y - font->ascent - pad,
 				               wd[i] + 2 * pad, font->ascent + font->descent + 2 * pad);
-				XSetForeground(dpy, gc, config.background_colour);
+				XftDrawStringUtf8(xd, &xft_bg, font, pos[i], text_y,
+				                  (const FcChar8 *)tmp, strlen(tmp));
 			}
 			else {
-				XSetForeground(dpy, gc, config.foreground_colour);
+				XftDrawStringUtf8(xd, &xft_fg, font, pos[i], text_y,
+				                  (const FcChar8 *)tmp, strlen(tmp));
 			}
-			XDrawString(dpy, draw, gc, pos[i], text_y, tmp, strlen(tmp));
 			free(names[i]);
 		}
 		free(names);
@@ -212,11 +250,9 @@ static void draw_bar_into(Drawable draw, int monitor_index)
 		if (!config.modules[i].enabled || !config.modules[i].cached_output) {
 			continue;
 		}
-		total_mw += XTextWidth(font, config.modules[i].cached_output,
-		                       strlen(config.modules[i].cached_output)) +
-		            mod_sp;
+		total_mw += xft_text_width(config.modules[i].cached_output) + mod_sp;
 	}
-	int ver_w = XTextWidth(font, SXBAR_VERSION, strlen(SXBAR_VERSION));
+	int ver_w = xft_text_width(SXBAR_VERSION);
 	int mx = w - total_mw - ver_w - 2 * config.text_padding - 2 * pad;
 
 	for (int i = 0; i < config.module_count; i++) {
@@ -224,14 +260,17 @@ static void draw_bar_into(Drawable draw, int monitor_index)
 			continue;
 		}
 		char *out = config.modules[i].cached_output;
-		int tw = XTextWidth(font, out, strlen(out));
-		XDrawString(dpy, draw, gc, mx, text_y, out, strlen(out));
+		int tw = xft_text_width(out);
+		XftDrawStringUtf8(xd, &xft_fg, font, mx, text_y, (const FcChar8 *)out, strlen(out));
 		mx += tw + mod_sp;
 	}
 
 	/* version */
 	int vx = w - ver_w - config.text_padding - pad;
-	XDrawString(dpy, draw, gc, vx, text_y, SXBAR_VERSION, strlen(SXBAR_VERSION));
+	XftDrawStringUtf8(xd, &xft_fg, font, vx, text_y,
+	                  (const FcChar8 *)SXBAR_VERSION, strlen(SXBAR_VERSION));
+
+	XftDrawDestroy(xd);
 }
 
 static void redraw_monitor(int i)
@@ -318,114 +357,10 @@ void init_defaults(void)
 	config.background_colour = parse_col("#000000");
 	config.foreground_colour = parse_col("#7abccd");
 	config.border_colour = parse_col("#005577");
-	config.font = strdup("fixed");
+	config.font = strdup("Linux Libertine O");
 	init_modules();
 }
 
-char *get_config_path()
-{
-	char path[PATH_MAX];
-	const char *config_home = getenv("HOME");
-	snprintf(path, sizeof path, "%s/.config/sxbarc", config_home);
-
-	if (access(path, R_OK) == 0) {
-		return strdup(path);
-	}
-
-	return strdup("/usr/local/share/sxbarc");
-}
-
-char *skip_spaces(char *s)
-{
-	while (isspace(*s)) {
-		s++;
-	}
-
-	if (*s == 0) {
-		return s;
-	}
-
-	char *end;
-	end = s + strlen(s) - 1;
-	while (end > s && isspace(*end)) {
-		*end-- = '\0';
-	}
-
-	return s;
-}
-
-void parse_config(const char *filepath, Config *config)
-{
-	FILE *config_file;
-	config_file = fopen(filepath, "r");
-
-	if (!config_file) {
-		fprintf(stderr, "Cannot open config %s\n", filepath);
-		return;
-	}
-
-	char line[256];
-
-	while (fgets(line, sizeof line, config_file)) {
-		if (!*line || *line == '#') {
-			continue;
-		}
-
-		char *key = strtok(line, ":");
-		char *value = strtok(NULL, "\n");
-
-		if (!key || !value) {
-			continue;
-		}
-
-		key = skip_spaces(key);
-		value = skip_spaces(value);
-
-		if (!strcmp(key, "bottom_bar")) {
-			config->bottom_bar = !strcmp(value, "true");
-		}
-
-		if (!strcmp(key, "height")) {
-			config->height = atoi(value);
-		}
-
-		if (!strcmp(key, "vertical_padding")) {
-			config->vertical_padding = atoi(value);
-		}
-
-		if (!strcmp(key, "horizontal_padding")) {
-			config->horizontal_padding = atoi(value);
-		}
-
-		if (!strcmp(key, "text_padding")) {
-			config->text_padding = atoi(value);
-		}
-
-		if (!strcmp(key, "border")) {
-			config->border = !strcmp(value, "true");
-		}
-
-		if (!strcmp(key, "border_width")) {
-			config->border_width = atoi(value);
-		}
-
-		if (!strcmp(key, "background_colour")) {
-			config->background_colour = parse_col(value);
-		}
-
-		if (!strcmp(key, "foreground_colour")) {
-			config->foreground_colour = parse_col(value);
-		}
-
-		if (!strcmp(key, "border_colour")) {
-			config->border_colour = parse_col(value);
-		}
-
-		if (!strcmp(key, "font")) {
-			config->font = strdup(value);
-		}
-	}
-}
 
 int find_window_monitor(Window win)
 {
@@ -445,14 +380,14 @@ void init_modules(void)
 
 	/* clock */
 	config.modules[config.module_count++] = (Module){.name = strdup("clock"),
-	                                                 .command = "date '+%H:%M:%S'",
+	                                                .command = strdup("date '+%H:%M:%S'"),
 	                                                 .enabled = True,
 	                                                 .refresh_interval = 1,
 	                                                 .last_update = 0,
 	                                                 .cached_output = NULL};
 	/* date */
 	config.modules[config.module_count++] = (Module){.name = strdup("date"),
-	                                                 .command = "date '+%Y-%m-%d'",
+	                                                .command = strdup("date '+%Y-%m-%d'"),
 	                                                 .enabled = True,
 	                                                 .refresh_interval = 60,
 	                                                 .last_update = 0,
@@ -460,8 +395,8 @@ void init_modules(void)
 	/* battery */
 	config.modules[config.module_count++] =
 	    (Module){.name = strdup("battery"),
-	             .command = "cat /sys/class/power_supply/BAT0/capacity 2>/dev/null | sed "
-	                        "'s/$/%/' || echo 'N/A'",
+	             .command = strdup("cat /sys/class/power_supply/BAT0/capacity 2>/dev/null | sed "
+	                        "'s/$/%/' || echo 'N/A'"),
 	             .enabled = False,
 	             .refresh_interval = 30,
 	             .last_update = 0,
@@ -469,7 +404,7 @@ void init_modules(void)
 	/* volume */
 	config.modules[config.module_count++] =
 	    (Module){.name = strdup("volume"),
-	             .command = "amixer get Master | grep -o '[0-9]*%' | head -1 || echo 'N/A'",
+	             .command = strdup("amixer get Master | grep -o '[0-9]*%' | head -1 || echo 'N/A'"),
 	             .enabled = True,
 	             .refresh_interval = 5,
 	             .last_update = 0,
@@ -477,8 +412,8 @@ void init_modules(void)
 	/* cpu */
 	config.modules[config.module_count++] =
 	    (Module){.name = strdup("cpu"),
-	             .command = "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' "
-	                        "| awk '{print 100-$1\"%\"}'",
+	             .command = strdup("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' "
+	                        "| awk '{print 100-$1\"%\"}'"),
 	             .enabled = True,
 	             .refresh_interval = 3,
 	             .last_update = 0,
@@ -583,7 +518,9 @@ void setup(void)
 	XSelectInput(dpy, root, PropertyChangeMask);
 
 	init_defaults();
-	parse_config(get_config_path(), &config);
+	char *cfgpath = get_config_path();
+	parse_config(cfgpath, &config);
+	free(cfgpath);
 	create_bars();
 }
 
