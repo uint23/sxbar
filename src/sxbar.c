@@ -357,7 +357,7 @@ void init_defaults(void)
 	config.background_colour = parse_col("#000000");
 	config.foreground_colour = parse_col("#7abccd");
 	config.border_colour = parse_col("#005577");
-	config.font = strdup("Linux Libertine O");
+	config.font = strdup("monospace");
 	init_modules();
 }
 
