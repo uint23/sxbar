@@ -40,12 +40,12 @@ EventHandler evtable[LASTEvent];
 XftFont *font;
 Display *dpy;
 Window root;
-Window *wins = NULL;
+Window *windows = NULL;
 XineramaScreenInfo *monitors = NULL;
 GC gc;
 Config config;
 Pixmap *buffers = NULL;
-int nmonitors = 0;
+int n_monitors = 0;
 int scr;
 XftColor xft_fg, xft_bg;
 
@@ -62,30 +62,36 @@ void cleanup_modules(void)
 void cleanup_resources(void)
 {
 	if (buffers) {
-		for (int i = 0; i < nmonitors; i++) {
+		for (int i = 0; i < n_monitors; i++) {
 			XFreePixmap(dpy, buffers[i]);
 		}
 		free(buffers);
 	}
-	if (wins) {
-		for (int i = 0; i < nmonitors; i++) {
-			XDestroyWindow(dpy, wins[i]);
+
+	if (windows) {
+		for (int i = 0; i < n_monitors; i++) {
+			XDestroyWindow(dpy, windows[i]);
 		}
-		free(wins);
+		free(windows);
 	}
+
 	if (monitors) {
 		XFree(monitors);
 	}
+
 	if (font) {
 		XftFontClose(dpy, font);
 	}
+
 	if (dpy) {
 		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_fg);
 		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_bg);
 	}
+
 	if (gc) {
 		XFreeGC(dpy, gc);
 	}
+
 	if (dpy) {
 		XCloseDisplay(dpy);
 	}
@@ -93,13 +99,13 @@ void cleanup_resources(void)
 
 void create_bars(void)
 {
-	int xin = 0;
+	int xinerama_active = 0;
 	if (XineramaIsActive(dpy)) {
-		monitors = XineramaQueryScreens(dpy, &nmonitors);
-		xin = 1;
+		monitors = XineramaQueryScreens(dpy, &n_monitors);
+		xinerama_active = 1;
 	}
-	if (!xin || nmonitors <= 0) {
-		nmonitors = 1;
+	if (!xinerama_active || n_monitors <= 0) {
+		n_monitors = 1;
 		monitors = malloc(sizeof *monitors);
 		monitors[0].screen_number = 0;
 		monitors[0].x_org = 0;
@@ -108,35 +114,42 @@ void create_bars(void)
 		monitors[0].height = DisplayHeight(dpy, scr);
 	}
 
-	wins = malloc(nmonitors * sizeof *wins);
-	buffers = malloc(nmonitors * sizeof *buffers);
+	windows = malloc(n_monitors * sizeof *windows);
+	buffers = malloc(n_monitors * sizeof *buffers);
 
-	for (int i = 0; i < nmonitors; i++) {
+	for (int i = 0; i < n_monitors; i++) {
 		int bw = config.border ? config.border_width : 0;
 		int w = monitors[i].width - (2 * config.horizontal_padding) - (2 * bw);
 		int h = config.height;
 		int x = monitors[i].x_org + config.horizontal_padding;
-		int y = config.bottom_bar ? monitors[i].y_org + monitors[i].height - h - config.vertical_padding - bw
-		            : monitors[i].y_org + config.vertical_padding;
+		int y = config.bottom_bar ?
+			    monitors[i].y_org + monitors[i].height - h - config.vertical_padding - bw :
+				monitors[i].y_org + config.vertical_padding;
 
-		XSetWindowAttributes wa = {.background_pixel = config.background_colour,
-		                           .border_pixel = config.border_colour,
-		                           .event_mask = ExposureMask | ButtonPressMask};
+		XSetWindowAttributes wa = {
+			.background_pixel = config.background_colour,
+			.border_pixel = config.border_colour,
+			.event_mask = ExposureMask | ButtonPressMask
+		};
 
-		wins[i] = XCreateWindow(dpy, root, x, y, w, h, bw, CopyFromParent, InputOutput,
-		                        DefaultVisual(dpy, scr),
-		                        CWBackPixel | CWBorderPixel | CWEventMask, &wa);
+		windows[i] = XCreateWindow(
+			dpy, root, x, y, w, h, bw, CopyFromParent, InputOutput,
+			DefaultVisual(dpy, scr),
+			CWBackPixel | CWBorderPixel | CWEventMask, &wa
+		);
 
-		XStoreName(dpy, wins[i], "sxbar");
+		XStoreName(dpy, windows[i], "sxbar");
 		char res_name[] = "sxbar";
 		char res_class[] = "sxbar";
 		XClassHint ch = {res_name, res_class};
-		XSetClassHint(dpy, wins[i], &ch);
+		XSetClassHint(dpy, windows[i], &ch);
 
 		Atom A_WM_TYPE = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
 		Atom A_WM_TYPE_DOCK = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
-		XChangeProperty(dpy, wins[i], A_WM_TYPE, XA_ATOM, 32, PropModeReplace,
-		                (unsigned char *)&A_WM_TYPE_DOCK, 1);
+		XChangeProperty(
+			dpy, windows[i], A_WM_TYPE, XA_ATOM, 32, PropModeReplace,
+			(unsigned char *)&A_WM_TYPE_DOCK, 1
+		);
 
 		Atom A_STRUT = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
 		long strut[12] = {0};
@@ -150,14 +163,16 @@ void create_bars(void)
 			strut[8] = x;
 			strut[9] = x + w + 2 * bw - 1;
 		}
-		XChangeProperty(dpy, wins[i], A_STRUT, XA_CARDINAL, 32, PropModeReplace,
-		                (unsigned char *)strut, 12);
+		XChangeProperty(
+			dpy, windows[i], A_STRUT, XA_CARDINAL, 32, PropModeReplace,
+			(unsigned char *)strut, 12
+		);
 
-		buffers[i] = XCreatePixmap(dpy, wins[i], w, h, DefaultDepth(dpy, scr));
-		XMapRaised(dpy, wins[i]);
+		buffers[i] = XCreatePixmap(dpy, windows[i], w, h, DefaultDepth(dpy, scr));
+		XMapRaised(dpy, windows[i]);
 	}
 
-	gc = XCreateGC(dpy, wins[0], 0, NULL);
+	gc = XCreateGC(dpy, windows[0], 0, NULL);
 	XSetForeground(dpy, gc, config.foreground_colour);
 	font = XftFontOpenName(dpy, scr, config.font);
 	if (!font) {
@@ -166,20 +181,28 @@ void create_bars(void)
 
 	{
 		Colormap cmap = DefaultColormap(dpy, scr);
-		XColor xc;
-		XRenderColor rc;
+		XColor xcolour;
+		XRenderColor render_colour;
 
-		xc.pixel = config.foreground_colour;
-		XQueryColor(dpy, cmap, &xc);
-		rc.red = xc.red; rc.green = xc.green; rc.blue = xc.blue; rc.alpha = 0xffff;
-		if (!XftColorAllocValue(dpy, DefaultVisual(dpy, scr), cmap, &rc, &xft_fg)) {
+		xcolour.pixel = config.foreground_colour;
+		XQueryColor(dpy, cmap, &xcolour);
+		render_colour.red = xcolour.red;
+		render_colour.green = xcolour.green;
+		render_colour.blue = xcolour.blue;
+		render_colour.alpha = 0xffff;
+
+		if (!XftColorAllocValue(dpy, DefaultVisual(dpy, scr), cmap, &render_colour, &xft_fg)) {
 			errx(1, "could not alloc xft fg");
 		}
 
-		xc.pixel = config.background_colour;
-		XQueryColor(dpy, cmap, &xc);
-		rc.red = xc.red; rc.green = xc.green; rc.blue = xc.blue; rc.alpha = 0xffff;
-		if (!XftColorAllocValue(dpy, DefaultVisual(dpy, scr), cmap, &rc, &xft_bg)) {
+		xcolour.pixel = config.background_colour;
+		XQueryColor(dpy, cmap, &xcolour);
+		render_colour.red = xcolour.red;
+		render_colour.green = xcolour.green;
+		render_colour.blue = xcolour.blue;
+		render_colour.alpha = 0xffff;
+
+		if (!XftColorAllocValue(dpy, DefaultVisual(dpy, scr), cmap, &render_colour, &xft_bg)) {
 			errx(1, "could not alloc xft bg");
 		}
 	}
@@ -278,7 +301,7 @@ void redraw_monitor(int i)
 	int w = monitors[i].width - 2 * config.horizontal_padding;
 	int h = config.height;
 	draw_bar_into(buffers[i], i);
-	XCopyArea(dpy, buffers[i], wins[i], gc, 0, 0, w, h, 0, 0);
+	XCopyArea(dpy, buffers[i], windows[i], gc, 0, 0, w, h, 0, 0);
 }
 
 int get_current_workspace(void)
@@ -339,7 +362,7 @@ void hdl_expose(XEvent *xev)
 void hdl_property(XEvent *xev)
 {
 	if (xev->xproperty.atom == XInternAtom(dpy, "_NET_CURRENT_DESKTOP", False)) {
-		for (int i = 0; i < nmonitors; i++) {
+		for (int i = 0; i < n_monitors; i++) {
 			redraw_monitor(i);
 		}
 	}
@@ -364,8 +387,8 @@ void init_defaults(void)
 
 int find_window_monitor(Window win)
 {
-	for (int i = 0; i < nmonitors; i++) {
-		if (wins[i] == win) {
+	for (int i = 0; i < n_monitors; i++) {
+		if (windows[i] == win) {
 			return i;
 		}
 	}
@@ -379,45 +402,56 @@ void init_modules(void)
 	config.module_count = 0;
 
 	/* clock */
-	config.modules[config.module_count++] = (Module){.name = strdup("clock"),
-	                                                .command = strdup("date '+%H:%M:%S'"),
-	                                                 .enabled = True,
-	                                                 .refresh_interval = 1,
-	                                                 .last_update = 0,
-	                                                 .cached_output = NULL};
+	config.modules[config.module_count++] = (Module){
+		.name = strdup("clock"),
+		.command = strdup("date '+%H:%M:%S'"),
+		.enabled = True,
+		.refresh_interval = 1,
+		.last_update = 0,
+		.cached_output = NULL
+	};
+
 	/* date */
-	config.modules[config.module_count++] = (Module){.name = strdup("date"),
-	                                                .command = strdup("date '+%Y-%m-%d'"),
-	                                                 .enabled = True,
-	                                                 .refresh_interval = 60,
-	                                                 .last_update = 0,
-	                                                 .cached_output = NULL};
+	config.modules[config.module_count++] = (Module){
+		.name = strdup("date"),
+		.command = strdup("date '+%Y-%m-%d'"),
+		.enabled = True,
+		.refresh_interval = 60,
+		.last_update = 0,
+		.cached_output = NULL
+	};
+
 	/* battery */
-	config.modules[config.module_count++] =
-	    (Module){.name = strdup("battery"),
-	             .command = strdup("cat /sys/class/power_supply/BAT0/capacity 2>/dev/null | sed "
-	                        "'s/$/%/' || echo 'N/A'"),
-	             .enabled = False,
-	             .refresh_interval = 30,
-	             .last_update = 0,
-	             .cached_output = NULL};
+	config.modules[config.module_count++] = (Module){
+		.name = strdup("battery"),
+		.command = strdup("cat /sys/class/power_supply/BAT0/capacity 2>/dev/null | sed "
+				"'s/$/%/' || echo 'N/A'"),
+		.enabled = False,
+		.refresh_interval = 30,
+		.last_update = 0,
+		.cached_output = NULL
+	};
+
 	/* volume */
-	config.modules[config.module_count++] =
-	    (Module){.name = strdup("volume"),
-	             .command = strdup("amixer get Master | grep -o '[0-9]*%' | head -1 || echo 'N/A'"),
-	             .enabled = True,
-	             .refresh_interval = 5,
-	             .last_update = 0,
-	             .cached_output = NULL};
+	config.modules[config.module_count++] = (Module){
+		.name = strdup("volume"),
+	    .command = strdup("amixer get Master | grep -o '[0-9]*%' | head -1 || echo 'N/A'"),
+		.enabled = True,
+		.refresh_interval = 5,
+		.last_update = 0,
+		.cached_output = NULL
+	};
+
 	/* cpu */
-	config.modules[config.module_count++] =
-	    (Module){.name = strdup("cpu"),
-	             .command = strdup("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' "
-	                        "| awk '{print 100-$1\"%\"}'"),
-	             .enabled = True,
-	             .refresh_interval = 3,
-	             .last_update = 0,
-	             .cached_output = NULL};
+	config.modules[config.module_count++] = (Module){
+		.name = strdup("cpu"),
+		.command = strdup("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' "
+				"| awk '{print 100-$1\"%\"}'"),
+		.enabled = True,
+		.refresh_interval = 3,
+		.last_update = 0,
+		.cached_output = NULL
+	};
 }
 
 unsigned long parse_col(const char *hex)
@@ -444,7 +478,7 @@ void run(void)
 		time_t now = time(NULL);
 		if (now - last >= 1) {
 			update_modules();
-			for (int i = 0; i < nmonitors; i++) {
+			for (int i = 0; i < n_monitors; i++) {
 				redraw_monitor(i);
 			}
 			last = now;
