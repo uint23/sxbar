@@ -1,8 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <unistd.h>
 
 #include "defs.h"
@@ -27,15 +27,31 @@ static char *skip_spaces(char *s)
 
 char *get_config_path(void)
 {
-	char path[PATH_MAX];
+	const char *xdg = getenv("XDG_CONFIG_HOME");
 	const char *home = getenv("HOME");
-	if (!home) {
-		home = "/tmp"; /* fallback */
+	char path[PATH_MAX];
+
+	if (xdg && *xdg) {
+		snprintf(path, sizeof path, "%s/sxbar/sxbarc", xdg);
+		if (access(path, R_OK) == 0) {
+			return strdup(path);
+		}
 	}
-	snprintf(path, sizeof path, "%s/.config/sxbarc", home);
-	if (access(path, R_OK) == 0) {
-		return strdup(path);
+
+	if (home && *home) {
+		/* new preferred path */
+		snprintf(path, sizeof path, "%s/.config/sxbar/sxbarc", home);
+		if (access(path, R_OK) == 0) {
+			return strdup(path);
+		}
+
+		/* legacy path */
+		snprintf(path, sizeof path, "%s/.config/sxbarc", home);
+		if (access(path, R_OK) == 0) {
+			return strdup(path);
+		}
 	}
+
 	return strdup("/usr/local/share/sxbarc");
 }
 
