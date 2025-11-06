@@ -1,6 +1,18 @@
 CC      ?= gcc
-CFLAGS  ?= -std=c99 -Wall -Wextra -O3 -Isrc
-LDFLAGS ?= -lX11 -lXinerama
+PKG_CONFIG ?= pkg-config
+
+CFLAGS ?= -std=c99 -Os -pipe -Isrc \
+          -Wall -Wextra -Wformat=2 -Werror=format-security \
+          -Wshadow -Wpointer-arith -Wcast-qual -Wwrite-strings \
+          -Wmissing-prototypes -Wstrict-prototypes -Wswitch-enum \
+          -Wundef -Wvla -fno-common -fno-strict-aliasing \
+          -fstack-protector-strong -fPIE
+
+LDFLAGS ?= -Wl,-Os -pie
+
+# pkg-config libraries
+CFLAGS  += $(shell $(PKG_CONFIG) --cflags x11 xinerama xft freetype2)
+LDLIBS  += $(shell $(PKG_CONFIG) --libs   x11 xinerama xft freetype2) -lm
 
 PREFIX  ?= /usr/local
 BIN     := sxbar
@@ -16,7 +28,7 @@ MAN_DIR := $(PREFIX)/share/man/man1
 all: $(BIN)
 
 $(BIN): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
@@ -49,5 +61,9 @@ uninstall:
 	@rm -f $(DESTDIR)$(MAN_DIR)/$(MAN)
 	@echo "Uninstallation complete."
 
+clangd:
+	@echo "generating compile_flags.txt"
+	@rm -f compile_flags.txt
+	@for flag in $(CPPFLAGS) $(CFLAGS); do echo $$flag >> compile_flags.txt; done
 
-.PHONY: all clean install uninstall
+.PHONY: all clean install uninstall clangd
