@@ -113,7 +113,7 @@ void create_bars(void)
 
 	for (int i = 0; i < nmonitors; i++) {
 		int bw = config.border ? config.border_width : 0;
-		int w = monitors[i].width - 2 * config.horizontal_padding;
+		int w = monitors[i].width - (2 * config.horizontal_padding) - (2 * bw);
 		int h = config.height;
 		int x = monitors[i].x_org + config.horizontal_padding;
 		int y = config.bottom_bar ? monitors[i].y_org + monitors[i].height - h - config.vertical_padding - bw
