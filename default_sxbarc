@@ -1,3 +1,4 @@
+# layout and style
 bottom_bar          : true
 height              : 19
 vertical_padding    : 0
@@ -8,4 +9,30 @@ border_width        : 0
 background_colour   : #000000
 foreground_colour   : #7abccd
 border_colour       : #005577
-font                : fixed
+font                : monospace
+
+# modules
+module.0.name       : clock
+module.0.cmd        : date '+%H:%M:%S'
+module.0.enabled    : true
+module.0.interval   : 1
+
+module.1.name       : date
+module.1.cmd        : date '+%Y-%m-%d'
+module.1.enabled    : true
+module.1.interval   : 60
+
+module.2.name       : battery
+module.2.cmd        : cat /sys/class/power_supply/BAT0/capacity 2>/dev/null | sed 's/$/%/' || echo 'N/A'
+module.2.enabled    : false
+module.2.interval   : 30
+
+module.3.name       : volume
+module.3.cmd        : amixer get Master | grep -o '[0-9]*%' | head -1 || echo 'N/A'
+module.3.enabled    : true
+module.3.interval   : 5
+
+module.4.name       : cpu
+module.4.cmd        : top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100-$1"%"}'
+module.4.enabled    : true
+module.4.interval   : 3

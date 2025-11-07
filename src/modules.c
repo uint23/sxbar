@@ -11,6 +11,10 @@ extern Config config;
 
 static char *run_command(const char *cmd)
 {
+	if (!cmd || !*cmd) {
+		return strdup("");
+	}
+
 	FILE *fp = popen(cmd, "r");
 	if (!fp) {
 		return strdup("N/A");
@@ -28,11 +32,18 @@ static char *run_command(const char *cmd)
 
 		if (!res) {
 			res = malloc(l + 1);
+			if (!res) {
+				break;
+			}
 			strcpy(res, buffer);
 			len = l;
 		}
 		else {
-			res = realloc(res, len + l + 2);
+			char *tmp = realloc(res, len + l + 2);
+			if (!tmp) {
+				break;
+			}
+			res = tmp;
 			strcat(res, " ");
 			strcat(res, buffer);
 			len += l + 1;
@@ -55,71 +66,20 @@ void cleanup_modules(void)
 	config.max_modules = 0;
 }
 
-void init_modules(void)
-{
-	config.max_modules = 10;
-	config.modules = malloc(config.max_modules * sizeof(Module));
-	config.module_count = 0;
-
-	/* clock */
-	config.modules[config.module_count++] = (Module){
-		.name = strdup("clock"),
-		.command = strdup("date '+%H:%M:%S'"),
-		.enabled = True,
-		.refresh_interval = 1,
-		.last_update = 0,
-		.cached_output = NULL
-	};
-
-	/* date */
-	config.modules[config.module_count++] = (Module){
-		.name = strdup("date"),
-		.command = strdup("date '+%Y-%m-%d'"),
-		.enabled = True,
-		.refresh_interval = 60,
-		.last_update = 0,
-		.cached_output = NULL
-	};
-
-	/* battery */
-	config.modules[config.module_count++] = (Module){
-		.name = strdup("battery"),
-		.command = strdup("cat /sys/class/power_supply/BAT0/capacity 2>/dev/null | sed 's/$/%/' || echo 'N/A'"),
-		.enabled = False,
-		.refresh_interval = 30,
-		.last_update = 0,
-		.cached_output = NULL
-	};
-
-	/* volume */
-	config.modules[config.module_count++] = (Module){
-		.name = strdup("volume"),
-		.command = strdup("amixer get Master | grep -o '[0-9]*%' | head -1 || echo 'N/A'"),
-		.enabled = True,
-		.refresh_interval = 5,
-		.last_update = 0,
-		.cached_output = NULL
-	};
-
-	/* cpu */
-	config.modules[config.module_count++] = (Module){
-		.name = strdup("cpu"),
-		.command = strdup("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100-$1\"%\"}'"),
-		.enabled = True,
-		.refresh_interval = 3,
-		.last_update = 0,
-		.cached_output = NULL
-	};
-}
-
 void update_modules(void)
 {
 	time_t now = time(NULL);
 	for (int i = 0; i < config.module_count; i++) {
 		Module *m = &config.modules[i];
+
 		if (!m->enabled) {
 			continue;
 		}
+
+		if (m->refresh_interval <= 0) {
+			m->refresh_interval = 1;
+		}
+
 		if (now - m->last_update >= m->refresh_interval) {
 			free(m->cached_output);
 			m->cached_output = run_command(m->command);

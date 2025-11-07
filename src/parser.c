@@ -3,10 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 #include "defs.h"
 #include "parser.h"
+#include "modules.h"
 
 unsigned long parse_col(const char *hex);
 
@@ -63,6 +65,8 @@ void parse_config(const char *filepath, Config *cfg)
 		return;
 	}
 
+	int saw_module_key = 0;
+
 	char line[256];
 	while (fgets(line, sizeof line, fp)) {
 		if (!*line || *line == '#') {
@@ -77,6 +81,83 @@ void parse_config(const char *filepath, Config *cfg)
 
 		key = skip_spaces(key);
 		value = skip_spaces(value);
+
+		/* module.* handling */
+		if (!strncmp(key, "module.", 7)) {
+			/* 1st time: discard defaults and start fresh */
+			if (!saw_module_key) {
+				cleanup_modules();
+				cfg->max_modules = 4;
+				cfg->modules = calloc(cfg->max_modules, sizeof(Module));
+				cfg->module_count = 0;
+				saw_module_key = 1;
+			}
+
+			char *idx_part = key + 7;
+			char *field = strchr(idx_part, '.');
+			if (!field) {
+				continue;
+			}
+			*field++ = '\0';
+			if (!*idx_part || !*field) {
+				continue;
+			}
+			int idx = atoi(idx_part);
+			if (idx < 0) {
+				continue;
+			}
+
+			/* ensure capacity */
+			if (idx >= cfg->max_modules) {
+				int new_cap = cfg->max_modules;
+				while (idx >= new_cap) {
+					new_cap *= 2;
+				}
+				Module *nm = realloc(cfg->modules, new_cap * sizeof(Module));
+				if (!nm) {
+					fprintf(stderr, "sxbar: realloc failed for modules\n");
+					break;
+				}
+				/* zero init new slots */
+				memset(nm + cfg->max_modules, 0, (new_cap - cfg->max_modules) * sizeof(Module));
+				cfg->modules = nm;
+				cfg->max_modules = new_cap;
+			}
+			/* bump count if needed */
+			if (idx >= cfg->module_count) {
+				for (int i = cfg->module_count; i <= idx; i++) {
+					cfg->modules[i].enabled = False;
+					cfg->modules[i].refresh_interval = 1;
+					cfg->modules[i].last_update = 0;
+					cfg->modules[i].cached_output = NULL;
+					cfg->modules[i].name = NULL;
+					cfg->modules[i].command = NULL;
+				}
+				cfg->module_count = idx + 1;
+			}
+
+			Module *m = &cfg->modules[idx];
+
+			if (!strcmp(field, "name")) {
+				free(m->name);
+				m->name = strdup(value);
+			}
+			else if (!strcmp(field, "cmd") || !strcmp(field, "command")) {
+				free(m->command);
+				m->command = strdup(value);
+			}
+			else if (!strcmp(field, "enabled")) {
+				m->enabled = !strcmp(value, "true") || !strcmp(value, "1") ||
+					!strcasecmp(value, "yes") || !strcasecmp(value, "on");
+			}
+			else if (!strcmp(field, "interval") || !strcmp(field, "refresh_interval")) {
+				int iv = atoi(value);
+				if (iv > 0) {
+					m->refresh_interval = iv;
+				}
+			}
+			continue;
+		}
 
 		if (!strcmp(key, "bottom_bar")) {
 			cfg->bottom_bar = !strcmp(value, "true");

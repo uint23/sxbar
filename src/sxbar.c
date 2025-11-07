@@ -368,7 +368,9 @@ void init_defaults(void)
 	config.foreground_colour = parse_col("#7abccd");
 	config.border_colour = parse_col("#005577");
 	config.font = strdup("monospace");
-	init_modules();
+	config.modules = NULL;
+	config.module_count = 0;
+	config.max_modules = 0;
 }
 
 
