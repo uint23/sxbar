@@ -28,6 +28,7 @@ typedef struct Config {
 	int text_padding;
 	int border;
 	int border_width;
+	int font_size;
 	unsigned long background_colour;
 	unsigned long foreground_colour;
 	unsigned long border_colour;

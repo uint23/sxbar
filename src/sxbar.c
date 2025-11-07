@@ -161,9 +161,17 @@ void create_bars(void)
 
 	gc = XCreateGC(dpy, windows[0], 0, NULL);
 	XSetForeground(dpy, gc, config.foreground_colour);
-	font = XftFontOpenName(dpy, scr, config.font);
+	font = NULL;
+	if (config.font_size > 0) {
+		char spec[256];
+		snprintf(spec, sizeof spec, "%s:pixelsize=%d", config.font, config.font_size);
+		font = XftFontOpenName(dpy, scr, spec);
+	}
 	if (!font) {
-		errx(1, "could not load font %s", config.font);
+		font = XftFontOpenName(dpy, scr, config.font);
+	}
+	if (!font) {
+		errx(1, "could not load font %s (size %d)", config.font, config.font_size);
 	}
 
 	{
@@ -368,6 +376,7 @@ void init_defaults(void)
 	config.foreground_colour = parse_col("#7abccd");
 	config.border_colour = parse_col("#005577");
 	config.font = strdup("monospace");
+	config.font_size = 0; /* no  size overrides */
 	config.modules = NULL;
 	config.module_count = 0;
 	config.max_modules = 0;

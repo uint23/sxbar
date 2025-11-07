@@ -190,6 +190,12 @@ void parse_config(const char *filepath, Config *cfg)
 			free(cfg->font);
 			cfg->font = strdup(value);
 		}
+		else if (!strcmp(key, "font_size")) {
+			int sz = atoi(value);
+			if (sz > 0 && sz < 512) {
+				cfg->font_size = sz;
+			}
+		}
 	}
 	fclose(fp);
 }

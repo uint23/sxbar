@@ -10,6 +10,7 @@ background_colour   : #000000
 foreground_colour   : #7abccd
 border_colour       : #005577
 font                : monospace
+font_size           : 14
 
 # modules
 module.0.name       : clock
