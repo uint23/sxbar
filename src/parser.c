@@ -82,6 +82,63 @@ void parse_config(const char *filepath, Config *cfg)
 		key = skip_spaces(key);
 		value = skip_spaces(value);
 
+		/* workspaces.* handling */
+		if (!strncmp(key, "workspaces.", 11)) {
+			char *field = key + 11;
+
+			if (!strcmp(field, "labels")) {
+				/* free previous */
+				if (cfg->ws_labels) {
+					for (int i = 0; i < cfg->ws_label_count; i++) {
+						free(cfg->ws_labels[i]);
+					}
+					free(cfg->ws_labels);
+					cfg->ws_labels = NULL;
+					cfg->ws_label_count = 0;
+				}
+				/* tokenize by spaces */
+				char *tmp = strdup(value);
+				char *tok = strtok(tmp, " \t");
+				while (tok) {
+					cfg->ws_labels = realloc(cfg->ws_labels, (cfg->ws_label_count + 1) * sizeof *cfg->ws_labels);
+					cfg->ws_labels[cfg->ws_label_count++] = strdup(tok);
+					tok = strtok(NULL, " \t");
+				}
+				free(tmp);
+			}
+			else if (!strcmp(field, "active_background")) {
+				cfg->ws_active_bg = parse_col(value);
+			}
+			else if (!strcmp(field, "active_foreground")) {
+				cfg->ws_active_fg = parse_col(value);
+			}
+			else if (!strcmp(field, "inactive_background")) {
+				cfg->ws_inactive_bg = parse_col(value);
+			}
+			else if (!strcmp(field, "inactive_foreground")) {
+				cfg->ws_inactive_fg = parse_col(value);
+			}
+			else if (!strcmp(field, "padding_left")) {
+				cfg->ws_pad_left = atoi(value);
+			}
+			else if (!strcmp(field, "padding_right")) {
+				cfg->ws_pad_right = atoi(value);
+			}
+			else if (!strcmp(field, "spacing")) {
+				cfg->ws_spacing = atoi(value);
+			}
+			else if (!strcmp(field, "position")) {
+				if (!strcasecmp(value, "left")) {
+					cfg->ws_position = WS_POS_LEFT;
+				} else if (!strcasecmp(value, "center") || !strcasecmp(value, "centre")) {
+					cfg->ws_position = WS_POS_CENTER;
+				} else if (!strcasecmp(value, "right")) {
+					cfg->ws_position = WS_POS_RIGHT;
+				}
+			}
+			continue;
+		}
+
 		/* module.* handling */
 		if (!strncmp(key, "module.", 7)) {
 			/* 1st time: discard defaults and start fresh */

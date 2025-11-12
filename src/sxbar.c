@@ -45,6 +45,8 @@ Pixmap *buffers = NULL;
 int n_monitors = 0;
 int scr;
 XftColor xft_fg, xft_bg;
+XftColor xft_ws_inactive_fg;
+XftColor xft_ws_active_fg;
 
 void cleanup_resources(void)
 {
@@ -73,6 +75,8 @@ void cleanup_resources(void)
 	if (dpy) {
 		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_fg);
 		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_bg);
+		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_ws_inactive_fg);
+		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_ws_active_fg);
 	}
 
 	if (gc) {
@@ -81,6 +85,14 @@ void cleanup_resources(void)
 
 	if (dpy) {
 		XCloseDisplay(dpy);
+	}
+
+	/* free workspace labels */
+	if (config.ws_labels) {
+		for (int i = 0; i < config.ws_label_count; i++) {
+			free(config.ws_labels[i]);
+		}
+		free(config.ws_labels);
 	}
 }
 
@@ -185,7 +197,6 @@ void create_bars(void)
 		render_colour.green = xcolour.green;
 		render_colour.blue = xcolour.blue;
 		render_colour.alpha = 0xffff;
-
 		if (!XftColorAllocValue(dpy, DefaultVisual(dpy, scr), cmap, &render_colour, &xft_fg)) {
 			errx(1, "could not alloc xft fg");
 		}
@@ -196,9 +207,28 @@ void create_bars(void)
 		render_colour.green = xcolour.green;
 		render_colour.blue = xcolour.blue;
 		render_colour.alpha = 0xffff;
-
 		if (!XftColorAllocValue(dpy, DefaultVisual(dpy, scr), cmap, &render_colour, &xft_bg)) {
 			errx(1, "could not alloc xft bg");
+		}
+
+		xcolour.pixel = config.ws_inactive_fg;
+		XQueryColor(dpy, cmap, &xcolour);
+		render_colour.red = xcolour.red;
+		render_colour.green = xcolour.green;
+		render_colour.blue = xcolour.blue;
+		render_colour.alpha = 0xffff;
+		if (!XftColorAllocValue(dpy, DefaultVisual(dpy, scr), cmap, &render_colour, &xft_ws_inactive_fg)) {
+			errx(1, "could not alloc xft ws inactive fg");
+		}
+
+		xcolour.pixel = config.ws_active_fg;
+		XQueryColor(dpy, cmap, &xcolour);
+		render_colour.red = xcolour.red;
+		render_colour.green = xcolour.green;
+		render_colour.blue = xcolour.blue;
+		render_colour.alpha = 0xffff;
+		if (!XftColorAllocValue(dpy, DefaultVisual(dpy, scr), cmap, &render_colour, &xft_ws_active_fg)) {
+			errx(1, "could not alloc xft ws active fg");
 		}
 	}
 }
@@ -216,7 +246,6 @@ void draw_bar_into(Drawable draw, int monitor_index)
 {
 	int w = monitors[monitor_index].width - 2 * config.horizontal_padding;
 	int h = config.height;
-	/* clear */
 	XSetForeground(dpy, gc, config.background_colour);
 	XFillRectangle(dpy, draw, gc, 0, 0, w, h);
 
@@ -226,68 +255,110 @@ void draw_bar_into(Drawable draw, int monitor_index)
 	int name_count = 0;
 	char **names = get_workspace_name(&name_count);
 
-	unsigned text_y = (h + font->ascent - font->descent) / 2;
-	const int pad = 5, ws_sp = 10, mod_sp = 20;
-	unsigned cur_x = config.text_padding + pad;
+	/* choose label source */
+	char **labels = NULL;
+	int label_count = 0;
+	if (config.ws_labels && config.ws_label_count > 0) {
+		labels = config.ws_labels;
+		label_count = config.ws_label_count;
+	}
+	else if (names) {
+		labels = names;
+		label_count = name_count;
+	}
 
-	/* workspaces */
-	if (names) {
-		unsigned *pos = malloc(name_count * sizeof *pos);
-		unsigned *wd = malloc(name_count * sizeof *wd);
-		for (int i = 0; i < name_count; i++) {
-			char tmp[64];
-			snprintf(tmp, sizeof tmp, " %s ", names[i]);
-			wd[i] = xft_text_width(tmp);
-			pos[i] = cur_x;
-			cur_x += wd[i] + ws_sp;
+	unsigned text_y = (h + font->ascent - font->descent) / 2;
+
+	/* measure workspace segment width */
+	int ws_segment_width = 0;
+	if (labels) {
+		for (int i = 0; i < label_count; i++) {
+			char tmp[128];
+			snprintf(tmp, sizeof tmp, "%s", labels[i]);
+			int tw = xft_text_width(tmp);
+			ws_segment_width += tw + config.ws_pad_left + config.ws_pad_right;
+			if (i + 1 < label_count) {
+				ws_segment_width += config.ws_spacing;
+			}
 		}
-		for (int i = 0; i < name_count; i++) {
-			char tmp[64];
-			snprintf(tmp, sizeof tmp, " %s ", names[i]);
+	}
+
+	/* compute starting x for workspaces based on position */
+	int modules_total_w = 0;
+	for (int i = 0; i < config.module_count; i++) {
+		if (!config.modules[i].enabled || !config.modules[i].cached_output) continue;
+		modules_total_w += xft_text_width(config.modules[i].cached_output) + 20;
+	}
+	int modules_block_left = w - modules_total_w - 2 * config.text_padding;
+
+	int ws_start_x;
+	switch (config.ws_position) {
+	case WS_POS_CENTER:
+		ws_start_x = (w - ws_segment_width) / 2;
+		break;
+	case WS_POS_RIGHT:
+		/* keep space for modules on far right */
+		ws_start_x = modules_block_left - ws_segment_width - config.ws_spacing;
+		if (ws_start_x < 0) ws_start_x = 0;
+		break;
+	case WS_POS_LEFT:
+	default:
+		ws_start_x = config.text_padding;
+		break;
+	}
+
+	/* draw workspaces */
+	if (labels) {
+		int cur_x = ws_start_x;
+		for (int i = 0; i < label_count; i++) {
+			char tmp[128];
+			snprintf(tmp, sizeof tmp, "%s", labels[i]);
+			int tw = xft_text_width(tmp);
+			int box_w = tw + config.ws_pad_left + config.ws_pad_right;
+			unsigned box_x = cur_x;
+			unsigned box_y = text_y - font->ascent - config.ws_pad_left;
+			unsigned box_h = font->ascent + font->descent + config.ws_pad_left + config.ws_pad_right;
+
+			/* background */
+			XSetForeground(dpy, gc, (i == current_ws) ? config.ws_active_bg : config.ws_inactive_bg);
+			XFillRectangle(dpy, draw, gc, box_x, box_y, box_w, box_h);
+
+			/* text */
 			if (i == current_ws) {
-				XSetForeground(dpy, gc, config.foreground_colour);
-				XFillRectangle(
-					dpy, draw, gc, pos[i] - pad, text_y - font->ascent - pad,
-					wd[i] + 2 * pad, font->ascent + font->descent + 2 * pad
-				);
 				XftDrawStringUtf8(
-					xd, &xft_bg, font, pos[i], text_y,
+					xd, &xft_ws_active_fg, font,
+					box_x + config.ws_pad_left, text_y,
 					(const FcChar8 *)tmp, strlen(tmp)
 				);
 			}
 			else {
 				XftDrawStringUtf8(
-					xd, &xft_fg, font, pos[i], text_y,
+					xd, &xft_ws_inactive_fg, font,
+					box_x + config.ws_pad_left, text_y,
 					(const FcChar8 *)tmp, strlen(tmp)
 				);
 			}
+
+			cur_x += box_w + config.ws_spacing;
+		}
+	}
+
+	/* free EWMH names if used */
+	if (names) {
+		for (int i = 0; i < name_count; i++) {
 			free(names[i]);
 		}
 		free(names);
-		free(pos);
-		free(wd);
 	}
-
-	XSetForeground(dpy, gc, config.foreground_colour);
 
 	/* modules */
-	int total_mw = 0;
+	int mx = w - modules_total_w - 2 * config.text_padding;
 	for (int i = 0; i < config.module_count; i++) {
-		if (!config.modules[i].enabled || !config.modules[i].cached_output) {
-			continue;
-		}
-		total_mw += xft_text_width(config.modules[i].cached_output) + mod_sp;
-	}
-	int mx = w - total_mw - 2 * config.text_padding - 2 * pad;
-
-	for (int i = 0; i < config.module_count; i++) {
-		if (!config.modules[i].enabled || !config.modules[i].cached_output) {
-			continue;
-		}
+		if (!config.modules[i].enabled || !config.modules[i].cached_output) continue;
 		char *out = config.modules[i].cached_output;
 		int tw = xft_text_width(out);
 		XftDrawStringUtf8(xd, &xft_fg, font, mx, text_y, (const FcChar8 *)out, strlen(out));
-		mx += tw + mod_sp;
+		mx += tw + 20;
 	}
 
 	XftDrawDestroy(xd);
@@ -376,10 +447,24 @@ void init_defaults(void)
 	config.foreground_colour = parse_col("#7abccd");
 	config.border_colour = parse_col("#005577");
 	config.font = strdup("monospace");
-	config.font_size = 0; /* no  size overrides */
+	config.font_size = 0;
+
+	/* modules */
 	config.modules = NULL;
 	config.module_count = 0;
 	config.max_modules = 0;
+
+	/* workspace customization defaults */
+	config.ws_labels = NULL;
+	config.ws_label_count = 0;
+	config.ws_active_bg = config.foreground_colour;
+	config.ws_active_fg = config.background_colour;
+	config.ws_inactive_bg = config.background_colour;
+	config.ws_inactive_fg = config.foreground_colour;
+	config.ws_pad_left = 5;
+	config.ws_pad_right = 5;
+	config.ws_spacing = 10;
+	config.ws_position = WS_POS_LEFT;
 }
 
 
