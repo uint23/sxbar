@@ -26,8 +26,15 @@ typedef enum {
 	WS_POS_RIGHT = 2
 } WorkspacePosition;
 
+typedef enum {
+	BAR_POS_TOP = 0,
+	BAR_POS_BOTTOM = 1,
+	BAR_POS_LEFT = 2,
+	BAR_POS_RIGHT = 3
+} BarPosition;
+
 typedef struct Config {
-	int bottom_bar;
+	BarPosition bar_position;
 	int height;
 	int vertical_padding;
 	int horizontal_padding;

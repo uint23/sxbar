@@ -6,6 +6,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <fontconfig/fontconfig.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -29,12 +30,15 @@ void init_defaults(void);
 unsigned long parse_col(const char *hex);
 void run(void);
 void setup(void);
+int xft_center_x(const char *s, int area_w, XftFont *f);
 int xft_text_width(const char *s);
+int xft_text_adv_v(const char *s);
 
 #include "parser.h"
 
 EventHandler evtable[LASTEvent];
 XftFont *font;
+XftFont *font_rotated = NULL;
 Display *dpy;
 Window root;
 Window *windows = NULL;
@@ -56,18 +60,19 @@ void cleanup_resources(void)
 		}
 		free(buffers);
 	}
-
 	if (windows) {
 		for (int i = 0; i < n_monitors; i++) {
 			XDestroyWindow(dpy, windows[i]);
 		}
 		free(windows);
 	}
-
 	if (monitors) {
 		XFree(monitors);
 	}
 
+	if (font_rotated && font_rotated != font) {
+		XftFontClose(dpy, font_rotated);
+	}
 	if (font) {
 		XftFontClose(dpy, font);
 	}
@@ -78,15 +83,12 @@ void cleanup_resources(void)
 		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_ws_inactive_fg);
 		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_ws_active_fg);
 	}
-
 	if (gc) {
 		XFreeGC(dpy, gc);
 	}
-
 	if (dpy) {
 		XCloseDisplay(dpy);
 	}
-
 	/* free workspace labels */
 	if (config.ws_labels) {
 		for (int i = 0; i < config.ws_label_count; i++) {
@@ -118,12 +120,40 @@ void create_bars(void)
 
 	for (int i = 0; i < n_monitors; i++) {
 		int bw = config.border ? config.border_width : 0;
-		int w = monitors[i].width - (2 * config.horizontal_padding) - (2 * bw);
-		int h = config.height;
-		int x = monitors[i].x_org + config.horizontal_padding;
-		int y = config.bottom_bar ?
-			    monitors[i].y_org + monitors[i].height - h - config.vertical_padding - bw :
-				monitors[i].y_org + config.vertical_padding;
+
+		int w = 0, h = 0, x = 0, y = 0;
+		switch (config.bar_position) {
+			case BAR_POS_TOP:
+				w = monitors[i].width - (2 * config.horizontal_padding) - (2 * bw);
+				h = config.height;
+				x = monitors[i].x_org + config.horizontal_padding;
+				y = monitors[i].y_org + config.vertical_padding;
+				break;
+			case BAR_POS_BOTTOM:
+				w = monitors[i].width - (2 * config.horizontal_padding) - (2 * bw);
+				h = config.height;
+				x = monitors[i].x_org + config.horizontal_padding;
+				y = monitors[i].y_org + monitors[i].height - h - config.vertical_padding - bw;
+				break;
+			case BAR_POS_LEFT:
+				w = config.height;
+				h = monitors[i].height - (2 * config.vertical_padding) - (2 * bw);
+				x = monitors[i].x_org + config.horizontal_padding;
+				y = monitors[i].y_org + config.vertical_padding;
+				break;
+			case BAR_POS_RIGHT:
+				w = config.height;
+				h = monitors[i].height - (2 * config.vertical_padding) - (2 * bw);
+				x = monitors[i].x_org + monitors[i].width - w - config.horizontal_padding - bw;
+				y = monitors[i].y_org + config.vertical_padding;
+				break;
+			default: /* fallback to bottom */
+				w = monitors[i].width - (2 * config.horizontal_padding) - (2 * bw);
+				h = config.height;
+				x = monitors[i].x_org + config.horizontal_padding;
+				y = monitors[i].y_org + monitors[i].height - h - config.vertical_padding - bw;
+				break;
+		}
 
 		XSetWindowAttributes wa = {
 			.background_pixel = config.background_colour,
@@ -132,10 +162,10 @@ void create_bars(void)
 		};
 
 		windows[i] = XCreateWindow(
-			dpy, root, x, y, w, h, bw, CopyFromParent, InputOutput,
-			DefaultVisual(dpy, scr),
-			CWBackPixel | CWBorderPixel | CWEventMask, &wa
-		);
+				dpy, root, x, y, w, h, bw, CopyFromParent, InputOutput,
+				DefaultVisual(dpy, scr),
+				CWBackPixel | CWBorderPixel | CWEventMask, &wa
+				);
 
 		XStoreName(dpy, windows[i], "sxbar");
 		char res_name[] = "sxbar";
@@ -146,26 +176,43 @@ void create_bars(void)
 		Atom A_WM_TYPE = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
 		Atom A_WM_TYPE_DOCK = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
 		XChangeProperty(
-			dpy, windows[i], A_WM_TYPE, XA_ATOM, 32, PropModeReplace,
-			(unsigned char *)&A_WM_TYPE_DOCK, 1
-		);
+				dpy, windows[i], A_WM_TYPE, XA_ATOM, 32, PropModeReplace,
+				(unsigned char *)&A_WM_TYPE_DOCK, 1
+				);
 
 		Atom A_STRUT = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
 		long strut[12] = {0};
-		if (config.bottom_bar) {
-			strut[3] = h + bw + config.vertical_padding;
-			strut[10] = x;
-			strut[11] = x + w + 2 * bw - 1;
-		}
-		else {
-			strut[2] = y + h + bw;
-			strut[8] = x;
-			strut[9] = x + w + 2 * bw - 1;
+		switch (config.bar_position) {
+			case BAR_POS_BOTTOM:
+				strut[3] = h + bw + config.vertical_padding;
+				strut[10] = x;
+				strut[11] = x + w + 2 * bw - 1;
+				break;
+			case BAR_POS_TOP:
+				strut[2] = y + h + bw;
+				strut[8] = x;
+				strut[9] = x + w + 2 * bw - 1;
+				break;
+			case BAR_POS_LEFT:
+				strut[0] = w + bw + config.horizontal_padding;
+				strut[4] = y;
+				strut[5] = y + h + 2 * bw - 1;
+				break;
+			case BAR_POS_RIGHT:
+				strut[1] = w + bw + config.horizontal_padding;
+				strut[6] = y;
+				strut[7] = y + h + 2 * bw - 1;
+				break;
+			default: /* fallback to bottom */
+				strut[3] = h + bw + config.vertical_padding;
+				strut[10] = x;
+				strut[11] = x + w + 2 * bw - 1;
+				break;
 		}
 		XChangeProperty(
-			dpy, windows[i], A_STRUT, XA_CARDINAL, 32, PropModeReplace,
-			(unsigned char *)strut, 12
-		);
+				dpy, windows[i], A_STRUT, XA_CARDINAL, 32, PropModeReplace,
+				(unsigned char *)strut, 12
+				);
 
 		buffers[i] = XCreatePixmap(dpy, windows[i], w, h, DefaultDepth(dpy, scr));
 		XMapRaised(dpy, windows[i]);
@@ -184,6 +231,28 @@ void create_bars(void)
 	}
 	if (!font) {
 		errx(1, "could not load font %s (size %d)", config.font, config.font_size);
+	}
+
+	/* create rotated font for vertical bars */
+	if (config.bar_position == BAR_POS_LEFT || config.bar_position == BAR_POS_RIGHT) {
+		FcPattern *pat = FcPatternDuplicate(font->pattern);
+		if (pat) {
+			FcMatrix rot = (FcMatrix){0, 1, -1, 0}; /* 90 deg clockwise */
+			FcPatternAddMatrix(pat, FC_MATRIX, &rot);
+			FcConfigSubstitute(NULL, pat, FcMatchPattern);
+			XftDefaultSubstitute(dpy, scr, pat);
+			XftFont *rf = XftFontOpenPattern(dpy, pat);
+			if (rf) {
+				font_rotated = rf;
+				pat = NULL; /* Xft now owns pattern */
+			}
+			if (pat) {
+				FcPatternDestroy(pat);
+			}
+		}
+		if (!font_rotated) {
+			font_rotated = font; /* fallback */
+		}
 	}
 
 	{
@@ -233,23 +302,129 @@ void create_bars(void)
 	}
 }
 
-int xft_text_width(const char *s)
-{
-	XGlyphInfo ext;
-	XftTextExtentsUtf8(dpy, font, (const FcChar8 *)s, strlen(s), &ext);
-
-	int ink_right = ext.x + (int)ext.width;
-	return ink_right > (int)ext.xOff ? ink_right : (int)ext.xOff;
-}
-
 void draw_bar_into(Drawable draw, int monitor_index)
 {
-	int w = monitors[monitor_index].width - 2 * config.horizontal_padding;
-	int h = config.height;
+	int w, h;
+	if (config.bar_position == BAR_POS_LEFT || config.bar_position == BAR_POS_RIGHT) {
+		int bw = config.border ? config.border_width : 0;
+		w = config.height;
+		h = monitors[monitor_index].height - 2 * config.vertical_padding - 2 * bw;
+	}
+	else {
+		int bw = config.border ? config.border_width : 0;
+		w = monitors[monitor_index].width - 2 * config.horizontal_padding - 2 * bw;
+		h = config.height;
+	}
+
 	XSetForeground(dpy, gc, config.background_colour);
 	XFillRectangle(dpy, draw, gc, 0, 0, w, h);
-
 	XftDraw *xd = XftDrawCreate(dpy, draw, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr));
+
+	/* vertical bar special path */
+	if (config.bar_position == BAR_POS_LEFT || config.bar_position == BAR_POS_RIGHT) {
+		XftFont *vf = font_rotated ? font_rotated : font;
+
+		int current_ws = get_current_workspace();
+		int name_count = 0;
+		char **names = get_workspace_name(&name_count);
+
+		char **labels = NULL;
+		int label_count = 0;
+		if (config.ws_labels && config.ws_label_count > 0) {
+			labels = config.ws_labels;
+			label_count = config.ws_label_count;
+		}
+		else if (names) {
+			labels = names;
+			label_count = name_count;
+		}
+
+		/* measure modules total vertical advance */
+		int modules_total_adv = 0;
+		for (int i = 0; i < config.module_count; i++) {
+			if (!config.modules[i].enabled || !config.modules[i].cached_output) {
+				continue;
+			}
+			modules_total_adv += xft_text_adv_v(config.modules[i].cached_output) + 20;
+		}
+
+		int ws_segment_adv = 0;
+		if (labels) {
+			for (int i = 0; i < label_count; i++) {
+				int adv = xft_text_adv_v(labels[i]);
+				ws_segment_adv += adv + config.ws_pad_left + config.ws_pad_right;
+				if (i + 1 < label_count) {
+					ws_segment_adv += config.ws_spacing;
+				}
+			}
+		}
+
+		int modules_block_top = h - modules_total_adv - 2 * config.text_padding;
+		int ws_start_y;
+		switch (config.ws_position) {
+			case WS_POS_CENTER:
+				ws_start_y = (h - ws_segment_adv) / 2;
+				break;
+			case WS_POS_RIGHT:
+				ws_start_y = modules_block_top - ws_segment_adv - config.ws_spacing;
+				if (ws_start_y < 0) {
+					ws_start_y = 0;
+				}
+				break;
+			case WS_POS_LEFT:
+			default:
+				ws_start_y = config.text_padding;
+				break;
+		}
+
+		/* workspaces */
+		if (labels) {
+			int cur_y = ws_start_y;
+			for (int i = 0; i < label_count; i++) {
+				const char *txt = labels[i];
+				int adv = xft_text_adv_v(txt);
+				int box_adv = adv + config.ws_pad_left + config.ws_pad_right;
+
+				/* background rectangle */
+				XSetForeground(dpy, gc, (i == current_ws) ? config.ws_active_bg : config.ws_inactive_bg);
+				XFillRectangle(dpy, draw, gc, 0, cur_y, w, box_adv);
+				XftColor *col = (i == current_ws) ? &xft_ws_active_fg : &xft_ws_inactive_fg;
+
+				/* draw rotated text centered horizontally within bar */
+				int text_offset = cur_y + config.ws_pad_left + vf->ascent;
+				int cx = xft_center_x(txt, w, vf);
+				XftDrawStringUtf8(xd, col, vf, cx, text_offset,
+						(const FcChar8 *)txt, strlen(txt));
+
+				cur_y += box_adv + config.ws_spacing;
+			}
+		}
+
+		if (names) {
+			for (int i = 0; i < name_count; i++) {
+				free(names[i]);
+			}
+			free(names);
+		}
+
+		/* modules */
+		int my = h - modules_total_adv - 2 * config.text_padding;
+		for (int i = 0; i < config.module_count; i++) {
+			if (!config.modules[i].enabled || !config.modules[i].cached_output) {
+				continue;
+			}
+			char *out = config.modules[i].cached_output;
+			int adv = xft_text_adv_v(out);
+
+			int cx = xft_center_x(out, w, vf);
+			XftDrawStringUtf8(xd, &xft_fg, vf, cx, my + vf->ascent,
+					(const FcChar8 *)out, strlen(out));
+			my += adv + 20;
+		}
+
+		XftDrawDestroy(xd);
+		return;
+	}
 
 	int current_ws = get_current_workspace();
 	int name_count = 0;
@@ -286,25 +461,29 @@ void draw_bar_into(Drawable draw, int monitor_index)
 	/* compute starting x for workspaces based on position */
 	int modules_total_w = 0;
 	for (int i = 0; i < config.module_count; i++) {
-		if (!config.modules[i].enabled || !config.modules[i].cached_output) continue;
+		if (!config.modules[i].enabled || !config.modules[i].cached_output) {
+			continue;
+		}
 		modules_total_w += xft_text_width(config.modules[i].cached_output) + 20;
 	}
 	int modules_block_left = w - modules_total_w - 2 * config.text_padding;
 
 	int ws_start_x;
 	switch (config.ws_position) {
-	case WS_POS_CENTER:
-		ws_start_x = (w - ws_segment_width) / 2;
-		break;
-	case WS_POS_RIGHT:
-		/* keep space for modules on far right */
-		ws_start_x = modules_block_left - ws_segment_width - config.ws_spacing;
-		if (ws_start_x < 0) ws_start_x = 0;
-		break;
-	case WS_POS_LEFT:
-	default:
-		ws_start_x = config.text_padding;
-		break;
+		case WS_POS_CENTER:
+			ws_start_x = (w - ws_segment_width) / 2;
+			break;
+		case WS_POS_RIGHT:
+			/* keep space for modules on far right */
+			ws_start_x = modules_block_left - ws_segment_width - config.ws_spacing;
+			if (ws_start_x < 0) {
+				ws_start_x = 0;
+			}
+			break;
+		case WS_POS_LEFT:
+		default:
+			ws_start_x = config.text_padding;
+			break;
 	}
 
 	/* draw workspaces */
@@ -354,7 +533,9 @@ void draw_bar_into(Drawable draw, int monitor_index)
 	/* modules */
 	int mx = w - modules_total_w - 2 * config.text_padding;
 	for (int i = 0; i < config.module_count; i++) {
-		if (!config.modules[i].enabled || !config.modules[i].cached_output) continue;
+		if (!config.modules[i].enabled || !config.modules[i].cached_output) {
+			continue;
+		}
 		char *out = config.modules[i].cached_output;
 		int tw = xft_text_width(out);
 		XftDrawStringUtf8(xd, &xft_fg, font, mx, text_y, (const FcChar8 *)out, strlen(out));
@@ -366,8 +547,17 @@ void draw_bar_into(Drawable draw, int monitor_index)
 
 void redraw_monitor(int i)
 {
-	int w = monitors[i].width - 2 * config.horizontal_padding;
-	int h = config.height;
+	int w, h;
+	if (config.bar_position == BAR_POS_LEFT || config.bar_position == BAR_POS_RIGHT) {
+		int bw = config.border ? config.border_width : 0;
+		w = config.height;
+		h = monitors[i].height - 2 * config.vertical_padding - 2 * bw;
+	}
+	else {
+		int bw = config.border ? config.border_width : 0;
+		w = monitors[i].width - 2 * config.horizontal_padding - 2 * bw;
+		h = config.height;
+	}
 	draw_bar_into(buffers[i], i);
 	XCopyArea(dpy, buffers[i], windows[i], gc, 0, 0, w, h, 0, 0);
 }
@@ -436,7 +626,7 @@ void hdl_property(XEvent *xev)
 
 void init_defaults(void)
 {
-	config.bottom_bar = True;
+	config.bar_position = BAR_POS_BOTTOM;
 	config.height = 19;
 	config.vertical_padding = 0;
 	config.horizontal_padding = 0;
@@ -532,6 +722,51 @@ void setup(void)
 	parse_config(cfgpath, &config);
 	free(cfgpath);
 	create_bars();
+}
+
+int xft_center_x(const char *s, int area_w, XftFont *f)
+{
+	XGlyphInfo ext;
+	XftTextExtentsUtf8(dpy, f, (const FcChar8 *)s, strlen(s), &ext);
+
+	int avail = area_w - 2 * config.text_padding;
+	if (avail < 0) {
+		avail = 0;
+	}
+
+	int cx = config.text_padding + ((avail - (int)ext.width) / 2) - (int)ext.x;
+	if (cx < 0) {
+		cx = 0;
+	}
+	return cx;
+}
+
+int xft_text_width(const char *s)
+{
+	XGlyphInfo ext;
+	XftTextExtentsUtf8(dpy, font, (const FcChar8 *)s, strlen(s), &ext);
+
+	int ink_right = ext.x + (int)ext.width;
+	return ink_right > (int)ext.xOff ? ink_right : (int)ext.xOff;
+}
+
+int xft_text_adv_v(const char *s)
+{
+	XGlyphInfo ext;
+	XftFont *f = font_rotated ? font_rotated : font;
+	XftTextExtentsUtf8(dpy, f, (const FcChar8 *)s, strlen(s), &ext);
+
+	int adv = ext.yOff;
+	if (adv < 0) {
+		adv = -adv;
+	}
+
+	int ink = ext.y + (int)ext.height;
+	if (ink > adv) {
+		adv = ink;
+	}
+
+	return adv;
 }
 
 int main(int ac, char **av)

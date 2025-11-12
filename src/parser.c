@@ -130,9 +130,11 @@ void parse_config(const char *filepath, Config *cfg)
 			else if (!strcmp(field, "position")) {
 				if (!strcasecmp(value, "left")) {
 					cfg->ws_position = WS_POS_LEFT;
-				} else if (!strcasecmp(value, "center") || !strcasecmp(value, "centre")) {
+				}
+				else if (!strcasecmp(value, "center") || !strcasecmp(value, "centre")) {
 					cfg->ws_position = WS_POS_CENTER;
-				} else if (!strcasecmp(value, "right")) {
+				}
+				else if (!strcasecmp(value, "right")) {
 					cfg->ws_position = WS_POS_RIGHT;
 				}
 			}
@@ -216,8 +218,24 @@ void parse_config(const char *filepath, Config *cfg)
 			continue;
 		}
 
+		/* global keys */
 		if (!strcmp(key, "bottom_bar")) {
-			cfg->bottom_bar = !strcmp(value, "true");
+			/* backward compat: map to TOP/BOTTOM if user still uses old key */
+			cfg->bar_position = (!strcmp(value, "true") ? BAR_POS_BOTTOM : BAR_POS_TOP);
+		}
+		else if (!strcmp(key, "bar_position")) {
+			if (!strcasecmp(value, "top")) {
+				cfg->bar_position = BAR_POS_TOP;
+			}
+			else if (!strcasecmp(value, "bottom")) {
+				cfg->bar_position = BAR_POS_BOTTOM;
+			}
+			else if (!strcasecmp(value, "left")) {
+				cfg->bar_position = BAR_POS_LEFT;
+			}
+			else if (!strcasecmp(value, "right")) {
+				cfg->bar_position = BAR_POS_RIGHT;
+			}
 		}
 		else if (!strcmp(key, "height")) {
 			cfg->height = atoi(value);
@@ -230,17 +248,20 @@ void parse_config(const char *filepath, Config *cfg)
 		}
 		else if (!strcmp(key, "text_padding")) {
 			cfg->text_padding = atoi(value);
-		} else if (!strcmp(key, "border")) {
+		}
+		else if (!strcmp(key, "border")) {
 			cfg->border = !strcmp(value, "true");
 		}
 		else if (!strcmp(key, "border_width")) {
 			cfg->border_width = atoi(value);
-		} else if (!strcmp(key, "background_colour")) {
+		}
+		else if (!strcmp(key, "background_colour")) {
 			cfg->background_colour = parse_col(value);
 		}
 		else if (!strcmp(key, "foreground_colour")) {
 			cfg->foreground_colour = parse_col(value);
-		} else if (!strcmp(key, "border_colour")) {
+		}
+		else if (!strcmp(key, "border_colour")) {
 			cfg->border_colour = parse_col(value);
 		}
 		else if (!strcmp(key, "font")) {

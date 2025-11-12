@@ -11,8 +11,8 @@ CFLAGS ?= -std=c99 -Os -pipe -Isrc \
 LDFLAGS ?= -Wl,-Os -pie
 
 # pkg-config libraries
-CFLAGS  += $(shell $(PKG_CONFIG) --cflags x11 xinerama xft freetype2)
-LDLIBS  += $(shell $(PKG_CONFIG) --libs   x11 xinerama xft freetype2) -lm
+CFLAGS  += $(shell $(PKG_CONFIG) --cflags x11 xinerama xft freetype2 fontconfig)
+LDLIBS  += $(shell $(PKG_CONFIG) --libs   x11 xinerama xft freetype2 fontconfig) -lm
 
 PREFIX  ?= /usr/local
 BIN     := sxbar
