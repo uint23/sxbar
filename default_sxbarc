@@ -37,3 +37,9 @@ module.4.name       : cpu
 module.4.cmd        : top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100-$1"%"}'
 module.4.enabled    : true
 module.4.interval   : 3
+
+module.5.name       : mem
+module.5.cmd        : free -h | awk '/^Mem/ { print $3 }' | sed s/i//g
+module.5.enabled    : true
+module.5.interval   : 3
+
