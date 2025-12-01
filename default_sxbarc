@@ -6,9 +6,9 @@ horizontal_padding  : 0
 text_padding        : 0
 border              : false
 border_width        : 0
-background_colour   : #000000
-foreground_colour   : #7abccd
-border_colour       : #005577
+background_colour   : #171717
+foreground_colour   : #fffde0
+border_colour       : #717394
 font                : monospace
 font_size           : 14
 
@@ -43,3 +43,12 @@ module.5.cmd        : free -h | awk '/^Mem/ { print $3 }' | sed s/i//g
 module.5.enabled    : true
 module.5.interval   : 3
 
+workspaces.labels              : one two three four five six seven eight nine
+workspaces.active_background   : #717394
+workspaces.active_foreground   : #fffde0
+workspaces.inactive_background : #171717
+workspaces.inactive_foreground : #fffde0
+workspaces.padding_left        : 10
+workspaces.padding_right       : 10
+workspaces.spacing             : 0
+workspaces.position            : left
