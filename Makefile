@@ -1,69 +1,64 @@
-CC      ?= gcc
-PKG_CONFIG ?= pkg-config
+# tools
+CC = cc
 
-CFLAGS ?= -std=c99 -Os -pipe -Isrc \
-          -Wall -Wextra -Wformat=2 -Werror=format-security \
-          -Wshadow -Wpointer-arith -Wcast-qual -Wwrite-strings \
-          -Wmissing-prototypes -Wstrict-prototypes -Wswitch-enum \
-          -Wundef -Wvla -fno-common -fno-strict-aliasing \
-          -fstack-protector-strong -fPIE
+# paths
+PREFIX = /usr/local
+MANPREFIX = ${PREFIX}/share/man
 
-LDFLAGS ?= -Wl,-Os -pie
+# libs
+LIBS = -lX11 -lXinerama -lXft -lfontconfig -lfreetype -lm
 
-# pkg-config libraries
-CFLAGS  += $(shell $(PKG_CONFIG) --cflags x11 xinerama xft freetype2 fontconfig)
-LDLIBS  += $(shell $(PKG_CONFIG) --libs   x11 xinerama xft freetype2 fontconfig) -lm
 
-PREFIX  ?= /usr/local
-BIN     := sxbar
-SRC_DIR := src
-OBJ_DIR := build
-SRC     := $(wildcard $(SRC_DIR)/*.c)
-OBJ     := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC))
-DEP     := $(OBJ:.o=.d)
+# flags
+CPPFLAGS = -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=700
+CFLAGS = -std=c99 -pedantic -Wall -Wextra -Os ${CPPFLAGS} -I/usr/X11R6/include -I/usr/X11R6/include/freetype2 -I/usr/include/freetype2
+LDFLAGS = ${LIBS} -L/usr/X11R6/lib
 
-MAN     := sxbar.1
-MAN_DIR := $(PREFIX)/share/man/man1
+# files
+SRC = src/sxbar.c src/modules.c src/parser.c
+OBJ = build/sxbar.o build/modules.o build/parser.o
+BIN = sxbar
 
-all: $(BIN)
+all: ${BIN}
 
-$(BIN): $(OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+# rules
+build/sxbar.o: src/sxbar.c src/defs.h src/modules.h src/parser.h
+	mkdir -p build
+	${CC} -c ${CFLAGS} src/sxbar.c -o build/sxbar.o
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
+build/modules.o: src/modules.c src/modules.h src/defs.h
+	mkdir -p build
+	${CC} -c ${CFLAGS} src/modules.c -o build/modules.o
 
--include $(DEP)
+build/parser.o: src/parser.c src/parser.h src/defs.h
+	mkdir -p build
+	${CC} -c ${CFLAGS} src/parser.c -o build/parser.o
 
-$(OBJ_DIR):
-	@mkdir -p $@
+${BIN}: ${OBJ}
+	${CC} -o ${BIN} ${OBJ} ${LDFLAGS}
 
 clean:
-	@rm -rf $(OBJ_DIR) $(BIN)
+	rm -rf build ${BIN}
 
 install: all
-	@echo "Installing $(BIN) to $(DESTDIR)$(PREFIX)/bin..."
-	@mkdir -p "$(DESTDIR)$(PREFIX)/bin"
-	@install -m 755 $(BIN) "$(DESTDIR)$(PREFIX)/bin/$(BIN)"
-	@echo "Installing man page to $(DESTDIR)$(MAN_DIR)..."
-	@mkdir -p $(DESTDIR)$(MAN_DIR)
-	@install -m 644 $(MAN) $(DESTDIR)$(MAN_DIR)/
-	@echo "Copying default configuration to $(DESTDIR)$(PREFIX)/share/sxbarc..."
-	@mkdir -p "$(DESTDIR)$(PREFIX)/share"
-	@install -m 644 default_sxbarc "$(DESTDIR)$(PREFIX)/share/sxbarc"
-	@echo "Installation complete."
+	mkdir -p ${DESTDIR}${PREFIX}/bin
+	cp -f ${BIN} ${DESTDIR}${PREFIX}/bin/
+	chmod 755 ${DESTDIR}${PREFIX}/bin/${BIN}
+
+	mkdir -p ${DESTDIR}${MANPREFIX}/man1
+	cp -f sxbar.1 ${DESTDIR}${MANPREFIX}/man1/
+	chmod 644 ${DESTDIR}${MANPREFIX}/man1/sxbar.1
+
+	mkdir -p ${DESTDIR}${PREFIX}/share
+	cp -f default_sxbarc ${DESTDIR}${PREFIX}/share/sxbarc
 
 uninstall:
-	@echo "Uninstalling $(BIN) from $(DESTDIR)$(PREFIX)/bin..."
-	@rm -f "$(DESTDIR)$(PREFIX)/bin/$(BIN)"
-	@echo "Uninstalling man page from $(DESTDIR)$(MAN_DIR)..."
-	@rm -f $(DESTDIR)$(MAN_DIR)/$(MAN)
-	@echo "Uninstallation complete."
+	rm -f ${DESTDIR}${PREFIX}/bin/${BIN} \
+	      ${DESTDIR}${MANPREFIX}/man1/sxbar.1 \
+	      ${DESTDIR}${PREFIX}/share/sxbarc
 
 clangd:
-	@echo "generating compile_flags.txt"
-	@rm -f compile_flags.txt
-	@for flag in $(CPPFLAGS) $(CFLAGS); do echo $$flag >> compile_flags.txt; done
+	rm -f compile_flags.txt
+	for f in ${CFLAGS}; do echo $$f >> compile_flags.txt; done
 
 .PHONY: all clean install uninstall clangd
