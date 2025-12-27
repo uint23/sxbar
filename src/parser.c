@@ -106,6 +106,12 @@ void parse_config(const char *filepath, Config *cfg)
 				}
 				free(tmp);
 			}
+			else if (!strcmp(field, "used_background")) {
+				cfg->ws_used_bg = parse_col(value);
+			}
+			else if (!strcmp(field, "used_foreground")) {
+				cfg->ws_used_fg = parse_col(value);
+			}
 			else if (!strcmp(field, "active_background")) {
 				cfg->ws_active_bg = parse_col(value);
 			}
@@ -222,7 +228,10 @@ void parse_config(const char *filepath, Config *cfg)
 		if (!strcmp(key, "bottom_bar")) {
 			/* backward compat: map to TOP/BOTTOM if user still uses old key */
 			cfg->bar_position = (!strcmp(value, "true") ? BAR_POS_BOTTOM : BAR_POS_TOP);
-		}
+		} else if (!strcmp(key, "only_used_ws")) {
+			cfg->only_used_ws = (!strcmp(value, "true") ? 1 : 0);
+        }
+
 		else if (!strcmp(key, "bar_position")) {
 			if (!strcasecmp(value, "top")) {
 				cfg->bar_position = BAR_POS_TOP;

@@ -33,9 +33,11 @@ typedef enum {
 	BAR_POS_RIGHT = 3
 } BarPosition;
 
+
 typedef struct Config {
 	BarPosition bar_position;
 	int height;
+    int only_used_ws;
 	int vertical_padding;
 	int horizontal_padding;
 	int text_padding;
@@ -57,6 +59,8 @@ typedef struct Config {
 	int ws_label_count;
 	unsigned long ws_active_bg;
 	unsigned long ws_active_fg;
+	unsigned long ws_used_bg;
+	unsigned long ws_used_fg;
 	unsigned long ws_inactive_bg;
 	unsigned long ws_inactive_fg;
 	int ws_pad_left;

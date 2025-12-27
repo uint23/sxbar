@@ -1,5 +1,6 @@
 # layout and style
 bottom_bar          : true
+only_used_ws        : false
 height              : 19
 vertical_padding    : 0
 horizontal_padding  : 0
@@ -46,6 +47,8 @@ module.5.interval   : 3
 workspaces.labels              : one two three four five six seven eight nine
 workspaces.active_background   : #717394
 workspaces.active_foreground   : #fffde0
+workspaces.used_background     : #000087
+workspaces.used_foreground     : #ffffff
 workspaces.inactive_background : #171717
 workspaces.inactive_foreground : #fffde0
 workspaces.padding_left        : 10
