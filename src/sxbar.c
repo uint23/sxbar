@@ -21,6 +21,7 @@ void create_bars(void);
 void draw_bar_into(Drawable draw, int monitor_index);
 void redraw_monitor(int monitor_index);
 int find_window_monitor(Window win);
+unsigned int get_used_workspaces_mask(void);
 int get_current_workspace(void);
 char **get_workspace_name(int *count);
 void hdl_dummy(XEvent *xev);
@@ -51,6 +52,7 @@ int scr;
 XftColor xft_fg, xft_bg;
 XftColor xft_ws_inactive_fg;
 XftColor xft_ws_active_fg;
+XftColor xft_ws_used_fg;
 
 void cleanup_resources(void)
 {
@@ -80,6 +82,7 @@ void cleanup_resources(void)
 	if (dpy) {
 		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_fg);
 		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_bg);
+		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_ws_used_fg);
 		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_ws_inactive_fg);
 		XftColorFree(dpy, DefaultVisual(dpy, scr), DefaultColormap(dpy, scr), &xft_ws_active_fg);
 	}
@@ -290,6 +293,16 @@ void create_bars(void)
 			errx(1, "could not alloc xft ws inactive fg");
 		}
 
+		xcolour.pixel = config.ws_inactive_fg;
+		XQueryColor(dpy, cmap, &xcolour);
+		render_colour.red = xcolour.red;
+		render_colour.green = xcolour.green;
+		render_colour.blue = xcolour.blue;
+		render_colour.alpha = 0xffff;
+		if (!XftColorAllocValue(dpy, DefaultVisual(dpy, scr), cmap, &render_colour, &xft_ws_used_fg)) {
+			errx(1, "could not alloc xft ws inactive fg");
+		}
+
 		xcolour.pixel = config.ws_active_fg;
 		XQueryColor(dpy, cmap, &xcolour);
 		render_colour.red = xcolour.red;
@@ -489,6 +502,8 @@ void draw_bar_into(Drawable draw, int monitor_index)
 	/* draw workspaces */
 	if (labels) {
 		int cur_x = ws_start_x;
+        unsigned int used_workspace_mask = get_used_workspaces_mask();
+
 		for (int i = 0; i < label_count; i++) {
 			char tmp[128];
 			snprintf(tmp, sizeof tmp, "%s", labels[i]);
@@ -498,27 +513,42 @@ void draw_bar_into(Drawable draw, int monitor_index)
 			unsigned box_y = text_y - font->ascent - config.ws_pad_left;
 			unsigned box_h = font->ascent + font->descent + config.ws_pad_left + config.ws_pad_right;
 
-			/* background */
-			XSetForeground(dpy, gc, (i == current_ws) ? config.ws_active_bg : config.ws_inactive_bg);
-			XFillRectangle(dpy, draw, gc, box_x, box_y, box_w, box_h);
+            int only_used_ws = config.only_used_ws;
+            int is_used = (used_workspace_mask & (1 << i));
 
-			/* text */
-			if (i == current_ws) {
+			/* background */
+            if (i == current_ws) {
+                XSetForeground(dpy, gc, config.ws_active_bg);
+                XFillRectangle(dpy, draw, gc, box_x, box_y, box_w, box_h);
 				XftDrawStringUtf8(
 					xd, &xft_ws_active_fg, font,
 					box_x + config.ws_pad_left, text_y,
 					(const FcChar8 *)tmp, strlen(tmp)
 				);
-			}
-			else {
+            } else if (is_used) {
+                XSetForeground(dpy, gc, config.ws_used_bg);
+                XFillRectangle(dpy, draw, gc, box_x, box_y, box_w, box_h);
 				XftDrawStringUtf8(
-					xd, &xft_ws_inactive_fg, font,
+					xd, &xft_ws_used_fg, font,
 					box_x + config.ws_pad_left, text_y,
 					(const FcChar8 *)tmp, strlen(tmp)
 				);
-			}
+            } else {
+                if (!only_used_ws) {
+                    XSetForeground(dpy, gc, config.ws_inactive_bg);
+                    XFillRectangle(dpy, draw, gc, box_x, box_y, box_w, box_h);
+                    XftDrawStringUtf8(
+                        xd, &xft_ws_inactive_fg, font,
+                        box_x + config.ws_pad_left, text_y,
+                        (const FcChar8 *)tmp, strlen(tmp)
+                    );
+                }
+            }
 
-			cur_x += box_w + config.ws_spacing;
+            if (only_used_ws)  {
+                if (is_used || i == current_ws) 
+                    cur_x += box_w + config.ws_spacing;
+            } else cur_x += box_w + config.ws_spacing;
 		}
 	}
 
@@ -562,6 +592,39 @@ void redraw_monitor(int i)
 	XCopyArea(dpy, buffers[i], windows[i], gc, 0, 0, w, h, 0, 0);
 }
 
+unsigned int get_used_workspaces_mask(void) 
+{
+    Atom list_atom = XInternAtom(dpy, "_NET_CLIENT_LIST", False);
+    Atom ws_atom = XInternAtom(dpy, "_NET_WM_DESKTOP", False);
+    Atom ret_type;
+    int fmt;
+    unsigned long nitems, after;
+    unsigned char *data = NULL;
+    unsigned int mask = 0;
+
+    if (XGetWindowProperty(dpy, root, list_atom, 0, ~0L, False, XA_WINDOW,
+                           &ret_type, &fmt, &nitems, &after, &data) == Success && data) {
+        Window *wins = (Window *)data;
+
+        for (unsigned long i = 0; i < nitems; i++) {
+            unsigned char *ws_data = NULL;
+            unsigned long n_ws, after_ws;
+            
+            if (XGetWindowProperty(dpy, wins[i], ws_atom, 0, 1, False, XA_CARDINAL,
+                                   &ret_type, &fmt, &n_ws, &after_ws, &ws_data) == Success && ws_data) {
+                
+                int ws_id = *(unsigned long *)ws_data;
+                if (ws_id >= 0 && ws_id < 32) {
+                    mask |= (1 << ws_id);
+                }
+                XFree(ws_data);
+            }
+        }
+        XFree(data);
+    }
+    return mask;
+}
+
 int get_current_workspace(void)
 {
 	Atom at = XInternAtom(dpy, "_NET_CURRENT_DESKTOP", False);
@@ -569,12 +632,16 @@ int get_current_workspace(void)
 	int fmt;
 	unsigned long n, after;
 	unsigned char *data = NULL;
+
+
 	if (XGetWindowProperty(dpy, root, at, 0, 1, False, XA_CARDINAL,
 		&ret_type, &fmt, &n, &after, &data) == Success && data) {
 		int ws = *(unsigned long *)data;
+
 		XFree(data);
 		return ws;
 	}
+
 	return -1;
 }
 
@@ -586,6 +653,7 @@ char **get_workspace_name(int *count)
 	int fmt;
 	unsigned long n, after;
 	unsigned char *data = NULL;
+
 	if (XGetWindowProperty(dpy, root, at, 0, (~0L), False, utf8,
 		&ret_type, &fmt, &n, &after, &data) == Success && data) {
 		char **names = NULL;
@@ -628,6 +696,7 @@ void init_defaults(void)
 {
 	config.bar_position = BAR_POS_BOTTOM;
 	config.height = 19;
+	config.only_used_ws = 0;
 	config.vertical_padding = 0;
 	config.horizontal_padding = 0;
 	config.text_padding = 0;
@@ -649,6 +718,8 @@ void init_defaults(void)
 	config.ws_label_count = 0;
 	config.ws_active_bg = config.foreground_colour;
 	config.ws_active_fg = config.background_colour;
+	config.ws_used_bg = config.background_colour;
+	config.ws_used_fg = config.foreground_colour;
 	config.ws_inactive_bg = config.background_colour;
 	config.ws_inactive_fg = config.foreground_colour;
 	config.ws_pad_left = 5;
@@ -683,6 +754,7 @@ void run(void)
 {
 	XEvent xev;
 	time_t last = 0;
+
 
 	while (True) {
 		while (XPending(dpy)) {
@@ -771,6 +843,7 @@ int xft_text_adv_v(const char *s)
 
 int main(int ac, char **av)
 {
+
 	if (ac > 1) {
 		if (!strcmp(av[1], "-v") || !strcmp(av[1], "--version")) {
 			printf("%s\n%s\n%s\n", SXBAR_VERSION, SXBAR_AUTHOR, SXBAR_LICINFO);
