@@ -127,6 +127,9 @@ void parse_config(const char *filepath, Config *cfg)
 			else if (!strcmp(field, "spacing")) {
 				cfg->ws_spacing = atoi(value);
 			}
+			else if (!strcmp(field, "only_active")) {
+				cfg->ws_only_active = !strcmp(value, "true");
+			}
 			else if (!strcmp(field, "position")) {
 				if (!strcasecmp(value, "left")) {
 					cfg->ws_position = WS_POS_LEFT;
@@ -191,6 +194,7 @@ void parse_config(const char *filepath, Config *cfg)
 					cfg->modules[i].cached_output = NULL;
 					cfg->modules[i].name = NULL;
 					cfg->modules[i].command = NULL;
+					cfg->modules[i].mod_position = MOD_POS_RIGHT;
 				}
 				cfg->module_count = idx + 1;
 			}
@@ -213,6 +217,17 @@ void parse_config(const char *filepath, Config *cfg)
 				int iv = atoi(value);
 				if (iv > 0) {
 					m->refresh_interval = iv;
+				}
+			}
+			else if (!strcmp(field, "position")) {
+				if (!strcasecmp(value, "left")) {
+					m->mod_position = MOD_POS_LEFT;
+				}
+				else if (!strcasecmp(value, "right")) {
+					m->mod_position = MOD_POS_RIGHT;
+				}
+				else {
+					m->mod_position = MOD_POS_RIGHT; 
 				}
 			}
 			continue;
