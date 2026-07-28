@@ -464,14 +464,20 @@ void draw_bar_into(Drawable draw, int monitor_index)
 		if (!config.modules[i].enabled || !config.modules[i].cached_output) {
 			continue;
 		}
-		modules_total_w += xft_text_width(config.modules[i].cached_output) + 20;
+		if (config.modules[i].mod_position == MOD_POS_RIGHT) {
+			modules_total_w += xft_text_width(config.modules[i].cached_output) + 20;
+		}
 	}
 	int modules_block_left = w - modules_total_w - 2 * config.text_padding;
 
 	int ws_start_x;
 	switch (config.ws_position) {
 		case WS_POS_CENTER:
-			ws_start_x = (w - ws_segment_width) / 2;
+			if (!config.ws_only_active) {
+				ws_start_x = (w - ws_segment_width) / 2;
+			} else {
+				ws_start_x = w / 2;
+			}
 			break;
 		case WS_POS_RIGHT:
 			/* keep space for modules on far right */
@@ -488,37 +494,63 @@ void draw_bar_into(Drawable draw, int monitor_index)
 
 	/* draw workspaces */
 	if (labels) {
-		int cur_x = ws_start_x;
-		for (int i = 0; i < label_count; i++) {
+		if (config.ws_only_active) {
 			char tmp[128];
-			snprintf(tmp, sizeof tmp, "%s", labels[i]);
+			snprintf(tmp, sizeof tmp, "%s", labels[current_ws]);
 			int tw = xft_text_width(tmp);
 			int box_w = tw + config.ws_pad_left + config.ws_pad_right;
-			unsigned box_x = cur_x;
+			
+			ws_segment_width = tw + config.ws_pad_left + config.ws_pad_right;
+			ws_start_x = (w - ws_segment_width) / 2;
+
+			unsigned box_x = ws_start_x;
 			unsigned box_y = text_y - font->ascent - config.ws_pad_left;
 			unsigned box_h = font->ascent + font->descent + config.ws_pad_left + config.ws_pad_right;
 
 			/* background */
-			XSetForeground(dpy, gc, (i == current_ws) ? config.ws_active_bg : config.ws_inactive_bg);
+			XSetForeground(dpy, gc, config.ws_inactive_bg);
 			XFillRectangle(dpy, draw, gc, box_x, box_y, box_w, box_h);
 
 			/* text */
-			if (i == current_ws) {
-				XftDrawStringUtf8(
-					xd, &xft_ws_active_fg, font,
-					box_x + config.ws_pad_left, text_y,
-					(const FcChar8 *)tmp, strlen(tmp)
-				);
-			}
-			else {
-				XftDrawStringUtf8(
-					xd, &xft_ws_inactive_fg, font,
-					box_x + config.ws_pad_left, text_y,
-					(const FcChar8 *)tmp, strlen(tmp)
-				);
-			}
+			XftDrawStringUtf8(
+				xd, &xft_ws_inactive_fg, font,
+				box_x + config.ws_pad_left, text_y,
+				(const FcChar8 *)tmp, strlen(tmp)
+			);
+		} else {
+			int cur_x = ws_start_x;
+			for (int i = 0; i < label_count; i++) {
+				char tmp[128];
+				snprintf(tmp, sizeof tmp, "%s", labels[i]);
+				int tw = xft_text_width(tmp);
+				int box_w = tw + config.ws_pad_left + config.ws_pad_right;
 
-			cur_x += box_w + config.ws_spacing;
+				unsigned box_x = cur_x;
+				unsigned box_y = text_y - font->ascent - config.ws_pad_left;
+				unsigned box_h = font->ascent + font->descent + config.ws_pad_left + config.ws_pad_right;
+
+				/* background */
+				XSetForeground(dpy, gc, (i == current_ws) ? config.ws_active_bg : config.ws_inactive_bg);
+				XFillRectangle(dpy, draw, gc, box_x, box_y, box_w, box_h);
+
+				/* text */
+				if (i == current_ws) {
+					XftDrawStringUtf8(
+						xd, &xft_ws_active_fg, font,
+						box_x + config.ws_pad_left, text_y,
+						(const FcChar8 *)tmp, strlen(tmp)
+					);
+				}
+				else {
+					XftDrawStringUtf8(
+						xd, &xft_ws_inactive_fg, font,
+						box_x + config.ws_pad_left, text_y,
+						(const FcChar8 *)tmp, strlen(tmp)
+					);
+				}
+
+				cur_x += box_w + config.ws_spacing;
+			}
 		}
 	}
 
@@ -532,14 +564,23 @@ void draw_bar_into(Drawable draw, int monitor_index)
 
 	/* modules */
 	int mx = w - modules_total_w - 2 * config.text_padding;
+	int mxl = 20 + config.text_padding; /* module starting x position for left drawing modules */
 	for (int i = 0; i < config.module_count; i++) {
 		if (!config.modules[i].enabled || !config.modules[i].cached_output) {
 			continue;
 		}
 		char *out = config.modules[i].cached_output;
 		int tw = xft_text_width(out);
-		XftDrawStringUtf8(xd, &xft_fg, font, mx, text_y, (const FcChar8 *)out, strlen(out));
-		mx += tw + 20;
+		switch (config.modules[i].mod_position) {
+			case MOD_POS_RIGHT:
+				XftDrawStringUtf8(xd, &xft_fg, font, mx, text_y, (const FcChar8 *)out, strlen(out));
+				mx += tw + 20;
+				break;
+			case MOD_POS_LEFT:
+				XftDrawStringUtf8(xd, &xft_fg, font, mxl, text_y, (const FcChar8 *)out, strlen(out));
+				mxl += tw + 20;
+				break;
+		}
 	}
 
 	XftDrawDestroy(xd);
@@ -655,6 +696,7 @@ void init_defaults(void)
 	config.ws_pad_right = 5;
 	config.ws_spacing = 10;
 	config.ws_position = WS_POS_LEFT;
+	config.ws_only_active = 0;
 }
 
 
