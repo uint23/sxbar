@@ -22,31 +22,16 @@ static char *run_command(const char *cmd)
 
 	char buffer[1024];
 	char *res = NULL;
-	size_t len = 0;
 
-	while (fgets(buffer, sizeof buffer, fp)) {
+	if (fgets(buffer, sizeof buffer, fp)) {
 		size_t l = strlen(buffer);
 		if (l > 0 && buffer[l - 1] == '\n') {
 			buffer[--l] = '\0';
 		}
 
-		if (!res) {
-			res = malloc(l + 1);
-			if (!res) {
-				break;
-			}
-			strcpy(res, buffer);
-			len = l;
-		}
-		else {
-			char *tmp = realloc(res, len + l + 2);
-			if (!tmp) {
-				break;
-			}
-			res = tmp;
-			strcat(res, " ");
-			strcat(res, buffer);
-			len += l + 1;
+		res = malloc(l + 1);
+		if (res) {
+			memcpy(res, buffer, l + 1);
 		}
 	}
 	pclose(fp);
