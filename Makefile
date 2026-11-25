@@ -4,13 +4,14 @@ CC = cc
 # paths
 PREFIX = /usr/local
 MANPREFIX = ${PREFIX}/share/man
+CONFIG = ${PREFIX}/share/sxbarc
 
 # libs
 LIBS = -lX11 -lXinerama -lXft -lfontconfig -lfreetype -lm
 
 
 # flags
-CPPFLAGS = -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=700
+CPPFLAGS = -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=700 -DSXBAR_CONFIG_PATH=\"${CONFIG}\"
 CFLAGS = -std=c99 -pedantic -Wall -Wextra -Os ${CPPFLAGS} -I/usr/X11R6/include -I/usr/X11R6/include/freetype2 -I/usr/include/freetype2
 LDFLAGS = ${LIBS} -L/usr/X11R6/lib
 
@@ -50,12 +51,12 @@ install: all
 	chmod 644 ${DESTDIR}${MANPREFIX}/man1/sxbar.1
 
 	mkdir -p ${DESTDIR}${PREFIX}/share
-	cp -f default_sxbarc ${DESTDIR}${PREFIX}/share/sxbarc
+	cp -f default_sxbarc ${DESTDIR}${CONFIG}
 
 uninstall:
 	rm -f ${DESTDIR}${PREFIX}/bin/${BIN} \
 	      ${DESTDIR}${MANPREFIX}/man1/sxbar.1 \
-	      ${DESTDIR}${PREFIX}/share/sxbarc
+	      ${DESTDIR}${CONFIG}
 
 clangd:
 	rm -f compile_flags.txt
