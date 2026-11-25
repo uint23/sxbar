@@ -54,7 +54,7 @@ char *get_config_path(void)
 		}
 	}
 
-	return strdup("/usr/local/share/sxbarc");
+	return strdup(SXBAR_CONFIG_PATH);
 }
 
 void parse_config(const char *filepath, Config *cfg)
