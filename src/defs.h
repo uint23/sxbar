@@ -11,6 +11,12 @@
 
 #define PATH_MAX 4096
 
+typedef enum {
+	MOD_POS_LEFT = 0,
+	/* CENTER IS CURRENTLY UNSUPPORTED :( */
+	MOD_POS_RIGHT = 1
+} ModulePosition;
+
 typedef struct Module {
 	char *name;
 	char *command;
@@ -18,6 +24,7 @@ typedef struct Module {
 	int refresh_interval;
 	time_t last_update;
 	char *cached_output;
+	ModulePosition mod_position;
 } Module;
 
 typedef enum {
@@ -63,6 +70,7 @@ typedef struct Config {
 	int ws_pad_right;
 	int ws_spacing;
 	WorkspacePosition ws_position;
+	int ws_only_active;
 } Config;
 
 typedef void (*EventHandler)(XEvent *);
